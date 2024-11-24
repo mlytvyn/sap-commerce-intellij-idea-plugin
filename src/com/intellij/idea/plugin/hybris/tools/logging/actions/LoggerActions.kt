@@ -79,7 +79,7 @@ abstract class AbstractLoggerAction(private val logLevel: String, val icon: Icon
                                 """
                                     <p>Level  : $logLevel</p>
                                     <p>Logger : $abbreviationLogIdentifier</p>
-                                    <p>${server.displayName ?: server.generatedURL}</p>"""
+                                    <p>${server.shortenConnectionName()}</p>"""
 
                             )
                         } else {
@@ -90,7 +90,7 @@ abstract class AbstractLoggerAction(private val logLevel: String, val icon: Icon
                                 """
                                     <p>Level  : $logLevel</p>
                                     <p>Logger : $abbreviationLogIdentifier</p>
-                                    <p>${server.displayName ?: server.generatedURL}</p>"""
+                                    <p>${server.shortenConnectionName()}</p>"""
                             )
                         }
                     } finally {
@@ -98,6 +98,13 @@ abstract class AbstractLoggerAction(private val logLevel: String, val icon: Icon
                 }
             })
         }
+    }
+
+    override fun update(e: AnActionEvent) {
+        super.update(e)
+        val isRightPlace = "GoToAction" != e.place
+        e.presentation.isEnabled = isRightPlace
+        e.presentation.isVisible = isRightPlace
     }
 
     private fun notify(
@@ -117,6 +124,8 @@ abstract class AbstractLoggerAction(private val logLevel: String, val icon: Icon
 
 }
 
+class AllLoggerAction : AbstractLoggerAction("ALL", HybrisIcons.Log.Level.ALL)
+class OffLoggerAction : AbstractLoggerAction("OFF", HybrisIcons.Log.Level.OFF)
 class TraceLoggerAction : AbstractLoggerAction("TRACE", HybrisIcons.Log.Level.TRACE)
 class DebugLoggerAction : AbstractLoggerAction("DEBUG", HybrisIcons.Log.Level.DEBUG)
 class InfoLoggerAction : AbstractLoggerAction("INFO", HybrisIcons.Log.Level.INFO)
