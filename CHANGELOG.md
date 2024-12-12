@@ -1,3 +1,11 @@
+## [2024.3.3]
+
+### `Project Import` enhancements
+- Added Windows WSL support [#1286](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1286)
+
+### `Type System` enhancements
+- Migrated the Type System Global Meta Model to coroutines [#1287](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1287)
+
 ## [2024.3.2]
 
 ### `SAP CX Logging` enhancements
