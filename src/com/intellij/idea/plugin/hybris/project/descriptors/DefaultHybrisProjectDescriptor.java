@@ -20,6 +20,8 @@
 package com.intellij.idea.plugin.hybris.project.descriptors;
 
 import com.google.common.collect.Sets;
+import com.intellij.execution.wsl.WSLDistribution;
+import com.intellij.execution.wsl.WslDistributionManager;
 import com.intellij.idea.plugin.hybris.common.HybrisConstants;
 import com.intellij.idea.plugin.hybris.project.descriptors.impl.*;
 import com.intellij.idea.plugin.hybris.project.exceptions.HybrisConfigurationException;
@@ -49,6 +51,7 @@ import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -68,6 +71,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message;
 import static com.intellij.idea.plugin.hybris.project.descriptors.DefaultHybrisProjectDescriptor.DIRECTORY_TYPE.*;
@@ -560,7 +564,7 @@ public class DefaultHybrisProjectDescriptor implements HybrisProjectDescriptor {
             LOG.info("Scanning for higher priority modules");
             for (final File nonHybrisDir : moduleRootMap.get(NON_HYBRIS)) {
                 final Map<DIRECTORY_TYPE, Set<File>> nonHybrisModuleRootMap = newModuleRootMap();
-                scanSubdirectories(nonHybrisModuleRootMap, excludedFromScanning, true, nonHybrisDir.toPath(), progressListenerProcessor);
+                scanForSubdirectories(nonHybrisModuleRootMap, excludedFromScanning, true, nonHybrisDir.toPath(), progressListenerProcessor);
                 final Set<File> hybrisModuleSet = nonHybrisModuleRootMap.get(HYBRIS);
                 if (hybrisModuleSet.isEmpty()) {
                     LOG.info("Confirmed module " + nonHybrisDir);
@@ -723,14 +727,15 @@ public class DefaultHybrisProjectDescriptor implements HybrisProjectDescriptor {
             }
         }
 
-        scanSubdirectories(
-            moduleRootMap,
-            excludedFromScanning,
-            acceptOnlyHybrisModules,
-            rootProjectDirectory.toPath(),
-            progressListenerProcessor
-        );
+        scanForSubdirectories(moduleRootMap, excludedFromScanning, acceptOnlyHybrisModules, rootProjectDirectory.toPath(), progressListenerProcessor);
+    }
 
+    private void scanForSubdirectories(final Map<DIRECTORY_TYPE, Set<File>> moduleRootMap, final Set<File> excludedFromScanning, final boolean acceptOnlyHybrisModules, final Path rootProjectDirectory, final TaskProgressProcessor<File> progressListenerProcessor) throws IOException, InterruptedException {
+        if (isPathInWSLDistribution(rootProjectDirectory)) {
+            scanSubdirectoriesWSL(moduleRootMap, excludedFromScanning, acceptOnlyHybrisModules, rootProjectDirectory, progressListenerProcessor);
+        } else {
+            scanSubdirectories(moduleRootMap, excludedFromScanning, acceptOnlyHybrisModules, rootProjectDirectory, progressListenerProcessor);
+        }
     }
 
     private void scanSubdirectories(
@@ -762,6 +767,31 @@ public class DefaultHybrisProjectDescriptor implements HybrisProjectDescriptor {
             }
             files.close();
         }
+    }
+
+    private void scanSubdirectoriesWSL(@NotNull final Map<DIRECTORY_TYPE, Set<File>> moduleRootMap, final Set<File> excludedFromScanning, final boolean acceptOnlyHybrisModules, @NotNull final Path rootProjectDirectory, @Nullable final TaskProgressProcessor<File> progressListenerProcessor) throws InterruptedException, IOException {
+        if (!Files.isDirectory(rootProjectDirectory)) return;
+
+        try (final Stream<Path> stream = Files.list(rootProjectDirectory)) {
+            final var moduleRoots = stream
+                .filter(Objects::nonNull)
+                .filter(Files::isDirectory)
+                .filter(Predicate.not(this::isDirectoryExcluded))
+                .filter(file -> !Files.isSymbolicLink(file) || followSymlink)
+                .map(Path::toFile)
+                .toList();
+            for (final var moduleRoot : moduleRoots) {
+                findModuleRoots(moduleRootMap, excludedFromScanning, acceptOnlyHybrisModules, moduleRoot, progressListenerProcessor);
+            }
+        }
+    }
+
+    public static boolean isPathInWSLDistribution(@NotNull final Path rootProjectDirectory) {
+        return WslDistributionManager.getInstance().getInstalledDistributions().stream()
+            .map(WSLDistribution::getUNCRootPath)
+            .map(String::valueOf)
+            .filter(StringUtils::isNoneBlank)
+            .anyMatch(wslRoot -> rootProjectDirectory.toString().startsWith(wslRoot));
     }
 
     private boolean isDirectoryExcluded(final Path file) {
