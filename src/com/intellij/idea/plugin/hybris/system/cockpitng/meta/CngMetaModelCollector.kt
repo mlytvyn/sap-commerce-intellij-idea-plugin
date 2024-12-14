@@ -1,6 +1,6 @@
 /*
- * This file is part of "SAP Commerce Developers Toolset" plugin for Intellij IDEA.
- * Copyright (C) 2019 EPAM Systems <hybrisideaplugin@epam.com>
+ * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
+ * Copyright (C) 2019-2024 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -17,16 +17,53 @@
  */
 package com.intellij.idea.plugin.hybris.system.cockpitng.meta
 
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
+import com.intellij.psi.search.ProjectScope
+import com.intellij.psi.stubs.StubIndex
+import com.intellij.psi.xml.XmlFile
+import com.intellij.util.Processor
 import com.intellij.util.xml.DomElement
 import com.intellij.util.xml.DomFileElement
+import com.intellij.util.xml.DomManager
+import com.intellij.util.xml.stubs.index.DomElementClassIndex
+import java.util.*
 
-interface CngMetaModelCollector {
+@Service(Service.Level.PROJECT)
+class CngMetaModelCollector(private val myProject: Project) {
 
     companion object {
         fun getInstance(project: Project): CngMetaModelCollector = project.getService(CngMetaModelCollector::class.java)
     }
 
-    fun <T : DomElement> collectDependencies(clazz: Class<T>, shouldCollect: (DomFileElement<T>) -> Boolean): Set<PsiFile>
+    private val myDomManager: DomManager = DomManager.getDomManager(myProject)
+
+    suspend fun <T : DomElement> collectDependencies(clazz: Class<T>, shouldCollect: (DomFileElement<T>) -> Boolean): Set<PsiFile> = readAction {
+        val files = HashSet<PsiFile>()
+
+        StubIndex.getInstance().processElements(
+            DomElementClassIndex.KEY,
+            clazz.name,
+            myProject,
+            ProjectScope.getAllScope(myProject),
+            PsiFile::class.java,
+            object : Processor<PsiFile> {
+                override fun process(psiFile: PsiFile): Boolean {
+                    psiFile.virtualFile ?: return true
+                    val domFileElement = myDomManager.getFileElement(psiFile as XmlFile, clazz) ?: return true
+
+                    if (shouldCollect.invoke(domFileElement)) {
+                        files.add(psiFile)
+                    }
+                    return true
+                }
+            }
+        )
+
+        files
+    }
+        .let { Collections.unmodifiableSet(it) }
+
 }
