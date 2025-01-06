@@ -1,5 +1,8 @@
 ## [2024.3.4]
 
+### `Integrations` enhancements
+- Added Windows WSL support [#1292](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1292)
+
 ### `ImpEx` enhancements
 - Introduced enum value reference resolution in the Value Lines [#1296](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1296)
 - Added enum value completion in the Value Lines [#1297](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1297)
