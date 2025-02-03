@@ -35,135 +35,119 @@ import com.intellij.idea.plugin.hybris.common.HybrisConstants.PROPERTY_HYBRIS_TE
 import com.intellij.idea.plugin.hybris.common.HybrisConstants.PROPERTY_PLATFORMHOME
 import com.intellij.idea.plugin.hybris.common.HybrisConstants.PROPERTY_STANDALONE_JAVAOPTIONS
 import com.intellij.idea.plugin.hybris.common.HybrisConstants.PROPERTY_STANDALONE_JDKMODULESEXPORTS
-import com.intellij.idea.plugin.hybris.facet.YFacet
 import com.intellij.idea.plugin.hybris.properties.PropertyService
 import com.intellij.idea.plugin.hybris.settings.components.ProjectSettingsComponent
-import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.CompilerModuleExtension
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.OrderEnumerator
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiClass
+import com.intellij.psi.search.GlobalSearchScope
 import java.util.*
 
 class HybrisJUnitExtension : RunConfigurationExtension() {
 
-    override fun isApplicableFor(configuration: RunConfigurationBase<*>) = if (configuration !is JUnitConfiguration) false
-    else ProjectSettingsComponent.getInstance(configuration.getProject()).isHybrisProject()
+	override fun isApplicableFor(configuration: RunConfigurationBase<*>) =
+		if (configuration !is JUnitConfiguration) false
+		else ProjectSettingsComponent.getInstance(configuration.getProject())
+				.isHybrisProject()
 
-    override fun <T : RunConfigurationBase<*>?> updateJavaParameters(configuration: T & Any, params: JavaParameters, runnerSettings: RunnerSettings?) {
-        if (runnerSettings != null || !isApplicableFor(configuration)) return
+	override fun <T : RunConfigurationBase<*>?> updateJavaParameters(
+		configuration: T & Any, params: JavaParameters, runnerSettings: RunnerSettings?
+	) {
 
-        val project = configuration.project
-        val vmParameters = params.vmParametersList
+		if (runnerSettings != null || !isApplicableFor(configuration)) return
 
-        addVmParameterIfNotExist(vmParameters, "-ea")
+		val junitConfig = (configuration as JUnitConfiguration)
+		val project = configuration.project
 
-        addPlatformHome(vmParameters, project)
-        addJavaRunProperties(project, vmParameters)
-        addHybrisEnvProperties(project, vmParameters)
+		if (isPureUnitTest(junitConfig, project)) return
 
-        enhanceClassPath(params, project)
-    }
+		val vmParameters = params.vmParametersList
 
-    private fun enhanceClassPath(params: JavaParameters, project: Project) {
-        val classPathEntries = HashSet<String>()
+		addVmParameterIfNotExist(vmParameters, "-ea")
 
-        val modules: Array<Module> = ModuleManager.getInstance(project).modules
-        for (module in modules) {
+		addPlatformHome(junitConfig, vmParameters, project)
+		addJavaRunProperties(project, vmParameters)
+		addHybrisEnvProperties(project, vmParameters)
+	}
 
-            if (YFacet.getState(module)?.type?.name.equals("CCV2")) {
-                continue
-            }
+	private fun isPureUnitTest(configuration: JUnitConfiguration, project: Project): Boolean {
+		val runClass = configuration.runClass ?: return false
+		val psiClass = JavaPsiFacade.getInstance(project)
+				.findClass(runClass, GlobalSearchScope.allScope(project)) ?: return false
 
-            // Get the module's output paths (both production and test)
-            val moduleRootManager = ModuleRootManager.getInstance(module)
+		return hasSpecificAnnotation(psiClass, "de.hybris.bootstrap.annotations.UnitTest")
+	}
 
-            // Get the compiler output paths for production and test
-            val productionOutput = moduleRootManager.getModuleExtension(CompilerModuleExtension::class.java)?.compilerOutputPath
-            val testOutput = moduleRootManager.getModuleExtension(CompilerModuleExtension::class.java)?.compilerOutputPathForTests
+	private fun hasSpecificAnnotation(psiClass: PsiClass, annotationFQN: String): Boolean {
+		return psiClass.annotations.any { it.qualifiedName == annotationFQN }
+	}
 
-            // Add the output paths to the classpath
-            if (productionOutput != null && classPathEntries.add(productionOutput.path)) {
-                params.classPath.add(productionOutput.path)
-            }
-            if (testOutput != null && classPathEntries.add(testOutput.path)) {
-                params.classPath.add(testOutput.path)
-            }
+	private fun addPlatformHome(junitConfig: JUnitConfiguration, vmParameters: ParametersList, project: Project) {
+		val platforhomePrefix = "-D$PROPERTY_PLATFORMHOME"
+		if (vmParameters.parameters.none { it.startsWith(platforhomePrefix) }) {
+			PropertyService.getInstance(project)
+					?.getPlatformHome()
+					?.let { vmParameters.add("$platforhomePrefix=$it") }
+		}
+	}
 
-            // **Add module dependencies to classpath**
-            OrderEnumerator.orderEntries(module).recursively().classes().roots.forEach {
-                val path = it.presentableUrl
-                if (classPathEntries.add(path)) {
-                    params.classPath.add(it)
-                }
-            }
-        }
-    }
+	private fun addJavaRunProperties(project: Project, vmParameters: ParametersList) {
+		PropertyService.getInstance(project)
+				?.findProperty(PROPERTY_STANDALONE_JAVAOPTIONS)
+				?.let { property -> StringTokenizer(property.trim { it <= ' ' }) }
+				?.let {
+					while (it.hasMoreTokens()) {
+						val newParam = sanitizeParameter(it.nextToken())
+						addVmParameterIfNotExist(vmParameters, newParam)
+					}
+				}
 
-    private fun addPlatformHome(vmParameters: ParametersList, project: Project) {
-        val platforhomePrefix = "-D$PROPERTY_PLATFORMHOME"
-        if (vmParameters.parameters.none { it.startsWith(platforhomePrefix) }) {
-            PropertyService.getInstance(project)
-                ?.getPlatformHome()
-                ?.let { vmParameters.add("$platforhomePrefix=$it") }
-        }
-    }
+		PropertyService.getInstance(project)
+				?.findProperty(PROPERTY_STANDALONE_JDKMODULESEXPORTS)
+				?.let { property -> StringTokenizer(property.trim { it <= ' ' }) }
+				?.let {
+					while (it.hasMoreTokens()) {
+						val newParam = sanitizeParameter(it.nextToken())
+						addVmParameterIfNotExist(vmParameters, newParam)
+					}
+				}
 
-    private fun addJavaRunProperties(project: Project, vmParameters: ParametersList) {
-        PropertyService.getInstance(project)
-            ?.findProperty(PROPERTY_STANDALONE_JAVAOPTIONS)
-            ?.let { property -> StringTokenizer(property.trim { it <= ' ' }) }
-            ?.let {
-                while (it.hasMoreTokens()) {
-                    val newParam = sanitizeParameter(it.nextToken())
-                    addVmParameterIfNotExist(vmParameters, newParam)
-                }
-            }
+		PropertyService.getInstance(project)
+				?.findProperty(PROPERTY_BUNDLED_SERVER_TYPE)
+				?.let {
+					addVmParameterIfNotExist(vmParameters, "-D$PROPERTY_BUNDLED_SERVER_TYPE=\"$it\"")
+				}
+	}
 
-        PropertyService.getInstance(project)
-            ?.findProperty(PROPERTY_STANDALONE_JDKMODULESEXPORTS)
-            ?.let { property -> StringTokenizer(property.trim { it <= ' ' }) }
-            ?.let {
-                while (it.hasMoreTokens()) {
-                    val newParam = sanitizeParameter(it.nextToken())
-                    addVmParameterIfNotExist(vmParameters, newParam)
-                }
-            }
+	private fun sanitizeParameter(param: String): String {
+		return param.replace("\"", "")
+	}
 
-        PropertyService.getInstance(project)
-            ?.findProperty(PROPERTY_BUNDLED_SERVER_TYPE)
-            ?.let {
-                addVmParameterIfNotExist(vmParameters, "-D$PROPERTY_BUNDLED_SERVER_TYPE=\"$it\"")
-            }
-    }
+	private fun addHybrisEnvProperties(project: Project, vmParameters: ParametersList) {
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_BIN_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_TEMP_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_ROLES_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_LOG_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_BOOTSTRAP_BIN_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_DATA_DIR);
+		addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_CONFIG_DIR);
+	}
 
-    private fun sanitizeParameter(param: String): String {
-        return param.replace("\"", "")
-    }
+	private fun addPropertyToVmParameter(project: Project, vmParameters: ParametersList, propertyKey: String) {
+		PropertyService.getInstance(project)
+				?.findProperty(propertyKey)
+				?.let {
+					addVmParameterIfNotExist(vmParameters, "-D$propertyKey=$it")
+				}
+	}
 
-    private fun addHybrisEnvProperties(project: Project, vmParameters: ParametersList) {
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_BIN_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_TEMP_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_ROLES_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_LOG_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_BOOTSTRAP_BIN_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_DATA_DIR);
-        addPropertyToVmParameter(project, vmParameters, PROPERTY_HYBRIS_CONFIG_DIR);
-    }
-
-    private fun addPropertyToVmParameter(project: Project, vmParameters: ParametersList, propertyKey: String) {
-        PropertyService.getInstance(project)
-            ?.findProperty(propertyKey)
-            ?.let {
-                addVmParameterIfNotExist(vmParameters, "-D$propertyKey=$it")
-            }
-    }
-
-    private fun addVmParameterIfNotExist(vmParameters: ParametersList, newParam: String) {
-        if (!vmParameters.hasParameter(newParam)) {
-            vmParameters.add(newParam)
-        }
-    }
+	private fun addVmParameterIfNotExist(vmParameters: ParametersList, newParam: String) {
+		if (!vmParameters.hasParameter(newParam)) {
+			vmParameters.add(newParam)
+		}
+	}
 
 }
