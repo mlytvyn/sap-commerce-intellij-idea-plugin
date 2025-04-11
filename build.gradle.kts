@@ -1,6 +1,6 @@
 /*
  * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
- * Copyright (C) 2019-2024 EPAM Systems <hybrisideaplugin@epam.com> and contributors
+ * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -272,11 +272,12 @@ intellijPlatformTesting {
     }
 }
 
-tasks.named<RunIdeTask>("runIde") {
-    jvmArgumentProviders += CommandLineArgumentProvider {
-        listOf("-Didea.kotlin.plugin.use.k2=true")
-    }
-}
+// does not work well, especially in the case of Maps
+//tasks.named<RunIdeTask>("runIde") {
+//    jvmArgumentProviders += CommandLineArgumentProvider {
+//        listOf("-Didea.kotlin.plugin.use.k2=true")
+//    }
+//}
 
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
 dependencies {
@@ -298,7 +299,6 @@ dependencies {
     intellijPlatform {
         intellijIdeaUltimate(properties("intellij.version"), useInstaller = false)
 
-        instrumentationTools()
         pluginVerifier()
 
         // printBundledPlugins for bundled plugins
@@ -332,19 +332,19 @@ dependencies {
 
         // JSON:
         // https://plugins.jetbrains.com/plugin/25364-json
-        plugin("com.intellij.modules.json:243.21565.129")
+        plugin("com.intellij.modules.json:251.23774.318")
 
         // Ant:
         // https://plugins.jetbrains.com/plugin/23025-ant
-        plugin("AntSupport:243.21565.129")
+        plugin("AntSupport:251.23774.318")
 
         // PsiViewer:
         // https://plugins.jetbrains.com/plugin/227-psiviewer
-        plugin("PsiViewer:243.7768")
+        plugin("PsiViewer:251.175")
 
         // JRebel and XRebel:
         // https://plugins.jetbrains.com/plugin/4441-jrebel-and-xrebel
-        plugin("JRebelPlugin:2024.4.1")
+        plugin("JRebelPlugin:2025.2.0")
 
         // Big Data Tools:
         // incredibly sad, but as for now API cannot be used by 3rd-party plugins

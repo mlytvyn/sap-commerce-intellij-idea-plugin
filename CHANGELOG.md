@@ -1,3 +1,79 @@
+## [2025.1.0]
+
+### Other
+- Compatibility release [#1324](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1324)
+
+## [2024.3.6]
+
+### `CCv2` enhancements
+- Introduced possibility to schedule an auto-deployment of the Build [#1311](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1311)
+- Allow downloading build logs for Builds in Unknown status [#1309](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1309)
+- Aligned Build removal confirmation message with SAP's one [#1310](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1310)
+- Enable `mode` & `strategy` only if `Deploy` is selected in the Build dialog [#1312](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1312)
+- Added Help pointing to SAP Help Portal for both Deploy and Build dialogs [#1313](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1313)
+- Allow re-deployment for environments in `failed` state [#1314](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1314)
+- Interrupt deployment tracking in case of `fail` during the deployment [#1315](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1315)
+- Do not hide confirmation notifications [#1316](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1316)
+- Improved cancellation of the deployment tracking [#1317](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1317)
+- Ensure build progress update during the warming-up phase [#1319](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1319)
+- Improved deployment tracking [#1321](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1321)
+- Improved deployment history representation per build [#1322](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1322)
+
+### Other
+- Adjusted dependencies used by Type/Bean/CNG MetaModels [#1318](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1318)
+
+## [2024.3.5]
+
+### `CCv2` enhancements
+- Added possibility to Track progress of the Build [#1304](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1304)
+- Show revision of the Build [#1305](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1305)
+- Added possibility to Track progress of the Deployment [#1306](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1306)
+- Added Deployment specific action to Track its progress [#1307](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1307)
+
+### `JUnit Tests` enhancements
+- For Pure JUnit Tests (annotated with `@UnitTest`) the JUnit Tests is no longer enhanced. It is also not necessary to enhance the Classpath if the `platformhome` is properly set. [#1302](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1302)
+
+### `Type System` enhancements
+- Added completion and navigation for `restrictionTypeCode` property of the `CMSRestrictionEvaluatorMapping` within the Spring XML file [#1300](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1300)
+
+### Fixes
+- Added read actions to build Type/Bean GlobalMetaModel [#1301](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1301)
+- Improved read action usage during creation of the Type and Bean Systems [#1308](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1308)
+
+## [2024.3.4]
+
+### `Integrations` enhancements
+- Added Windows WSL support [#1292](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1292)
+
+### `ImpEx` enhancements
+- Introduced enum value reference resolution in the Value Lines [#1296](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1296)
+- Added enum value completion in the Value Lines [#1297](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1297)
+- Added static enum value styling in the Value Lines [#1298](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1298)
+- Label OOTB enum value completion options [#1299](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1299)
+
+### `items.xml` inspection rules
+- Enum values must be all uppercase (ignore `_`) [#1294](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1294)
+
+### `ImpEx` inspection rules
+- Respect no value in the key column for `No Unique Value` inspection rule [#1295](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1295)
+
+## [2024.3.3]
+
+### `CCv2` enhancements
+- Unified UI elements [#1288](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1288)
+
+### `Project Import` enhancements
+- Added Windows WSL support [#1286](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1286)
+
+### `Type System` enhancements
+- Migrated the Type System Global Meta Model to coroutines [#1287](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1287)
+
+### `Bean System` enhancements
+- Migrated the Bean System Global Meta Model to coroutines [#1289](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1289)
+
+### Fixes
+- Fixed creation of the non-ssl remote configuration [#1290](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1290)
+
 ## [2024.3.2]
 
 ### `SAP CX Logging` enhancements
