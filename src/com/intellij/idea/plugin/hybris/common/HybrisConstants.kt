@@ -168,6 +168,9 @@ object HybrisConstants {
     const val PLATFORM_LIBRARY_GROUP = "Platform Bootstrap"
     const val PLATFORM_DATABASE_DRIVER_LIBRARY = "Database Drivers"
 
+    const val TOMCAT_WRAPPER_CONFIG_DIR = "conf"
+    const val DEFAULT_WRAPPER_FILENAME = "wrapper.conf"
+
     const val NODE_MODULES_DIRECTORY = "node_modules"
     const val JS_TARGET_DIRECTORY = "jsTarget"
     const val BOWER_COMPONENTS_DIRECTORY = "bower_components"

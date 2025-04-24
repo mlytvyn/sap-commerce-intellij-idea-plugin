@@ -19,6 +19,9 @@
 package com.intellij.idea.plugin.hybris.properties
 
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
+import com.intellij.idea.plugin.hybris.common.HybrisConstants.DEFAULT_WRAPPER_FILENAME
+import com.intellij.idea.plugin.hybris.common.HybrisConstants.PLATFORM_TOMCAT_DIRECTORY
+import com.intellij.idea.plugin.hybris.common.HybrisConstants.TOMCAT_WRAPPER_CONFIG_DIR
 import com.intellij.idea.plugin.hybris.common.yExtensionName
 import com.intellij.idea.plugin.hybris.project.utils.HybrisRootUtil
 import com.intellij.lang.properties.IProperty
@@ -30,6 +33,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
@@ -42,8 +46,10 @@ import com.intellij.psi.util.CachedValuesManager
 import com.intellij.util.asSafely
 import com.intellij.util.concurrency.AppExecutorUtil
 import java.io.File
+import java.io.InputStreamReader
 import java.util.*
 import java.util.regex.Pattern
+import com.intellij.openapi.diagnostic.logger
 
 /**
  * Currently there is an issue with Order and Properties that are included in lookup and suggestion.
@@ -53,6 +59,9 @@ import java.util.regex.Pattern
  */
 @Service(Service.Level.PROJECT)
 class PropertyService(val project: Project) {
+
+    private val LOG = logger<PropertyService>()
+
 
     private val nestedPropertyPrefix = "\${"
     private val nestedPropertySuffix = "}"
@@ -178,6 +187,46 @@ class PropertyService(val project: Project) {
 
     fun getPlatformHome(): String? {
         return HybrisRootUtil.findPlatformRootDirectory(project)?.path
+    }
+
+    fun getTomcatWrapperProperties(executionId: String? = null): Properties {
+        val platformModule = obtainPlatformModule()
+            ?: throw IllegalStateException("Platform module not found")
+
+        val tomcatDir = findTomcatDirectory(platformModule)
+
+        val configFileName = when (executionId) {
+            null -> DEFAULT_WRAPPER_FILENAME
+            else -> "wrapper-$executionId.conf"
+        }
+
+        val confFile = tomcatDir.findFileByRelativePath("$TOMCAT_WRAPPER_CONFIG_DIR/$configFileName")
+        return loadProperties(confFile)
+    }
+
+    private fun findTomcatDirectory(platformModule: Module): VirtualFile {
+        return ModuleRootManager.getInstance(platformModule)
+            .contentRoots
+            .asSequence()
+            .mapNotNull { it.findFileByRelativePath(PLATFORM_TOMCAT_DIRECTORY) }
+            .firstOrNull()
+            ?: throw IllegalStateException("Tomcat directory not found")
+    }
+
+    private fun loadProperties(confFile: VirtualFile?): Properties {
+        val properties = Properties()
+
+        try {
+            confFile?.inputStream?.let { inputStream ->
+                InputStreamReader(inputStream).use { reader ->
+                    properties.load(reader)
+                }
+            }
+        } catch (e: Exception) {
+            LOG.error(e)
+        }
+
+        return properties
     }
 
     private fun replacePlaceholder(result: LinkedHashMap<String, String>, key: String, visitedProperties: MutableSet<String>) {
