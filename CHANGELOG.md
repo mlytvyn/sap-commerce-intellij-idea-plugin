@@ -1,3 +1,8 @@
+## [2025.1.2]
+
+### Other
+- Allow "REMOVE" header for non-dynamic enums [#1335](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1335)
+
 ## [2025.1.1]
 
 ### Other
