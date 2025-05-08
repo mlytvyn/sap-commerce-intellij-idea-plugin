@@ -1,7 +1,7 @@
 /*
  * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
  * Copyright (C) 2014-2016 Alexander Bartash <AlexanderBartash@gmail.com>
- * Copyright (C) 2019-2024 EPAM Systems <hybrisideaplugin@epam.com> and contributors
+ * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -20,11 +20,8 @@
 package com.intellij.idea.plugin.hybris.project.tasks;
 
 import com.intellij.credentialStore.CredentialAttributes;
-import com.intellij.facet.FacetType;
 import com.intellij.facet.FacetTypeId;
 import com.intellij.facet.FacetTypeRegistry;
-import com.intellij.facet.ModifiableFacetModel;
-import com.intellij.framework.FrameworkType;
 import com.intellij.framework.detection.DetectionExcludesConfiguration;
 import com.intellij.framework.detection.impl.FrameworkDetectionUtil;
 import com.intellij.ide.passwordSafe.PasswordSafe;
@@ -148,6 +145,7 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
         final var projectSettingsComponent = ProjectSettingsComponent.getInstance(project);
         final var projectSettings = projectSettingsComponent.getState();
 
+        final var groupModuleConfigurator = configuratorFactory.getGroupModuleConfigurator();
         final var modulesFilesDirectory = hybrisProjectDescriptor.getModulesFilesDirectory();
         if (modulesFilesDirectory != null && !modulesFilesDirectory.exists()) {
             modulesFilesDirectory.mkdirs();
@@ -174,19 +172,20 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
             : model;
 
         configuratorFactory.getSpringConfigurator().process(indicator, hybrisProjectDescriptor, allModuleDescriptors);
-        configuratorFactory.getGroupModuleConfigurator().process(indicator, allModules);
+        groupModuleConfigurator.process(indicator, allModules);
 
         int counter = 0;
 
-        for (ModuleDescriptor moduleDescriptor : allModules) {
-            final Module javaModule = createJavaModule(indicator, allYModules, rootProjectModifiableModel, moduleDescriptor, appSettings);
+        final var application = ApplicationManager.getApplication();
+
+        for (final var moduleDescriptor : allModules) {
+            final var javaModule = createJavaModule(indicator, allYModules, rootProjectModifiableModel, moduleDescriptor, appSettings);
             modules.add(javaModule);
             counter++;
 
             if (counter >= COMMITTED_CHUNK_SIZE) {
                 counter = 0;
-                ApplicationManager.getApplication().invokeAndWait(
-                    () -> ApplicationManager.getApplication().runWriteAction(modifiableModelsProvider::commit));
+                application.invokeAndWait(() -> application.runWriteAction(modifiableModelsProvider::commit));
 
                 modifiableModelsProvider = new IdeModifiableModelsProviderImpl(project);
 
@@ -206,8 +205,7 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
 
         indicator.setText(message("hybris.project.import.saving.project"));
 
-        ApplicationManager.getApplication().invokeAndWait(
-            () -> ApplicationManager.getApplication().runWriteAction(modifiableModelsProvider::commit));
+        application.invokeAndWait(() -> application.runWriteAction(modifiableModelsProvider::commit));
 
         configuratorFactory.getLoadedConfigurator().configure(project, hybrisProjectDescriptor.getModulesChosenForImport());
 
@@ -215,6 +213,8 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
         configureKotlinCompiler(indicator, cache);
         configureEclipseModules(indicator);
         configureGradleModules(indicator);
+        configureAngularModules(indicator, groupModuleConfigurator, appSettings);
+
         project.putUserData(ExternalSystemDataKeys.NEWLY_CREATED_PROJECT, Boolean.TRUE);
     }
 
@@ -272,7 +272,8 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
     private Module createJavaModule(final @NotNull ProgressIndicator indicator,
                                     final Map<String, YModuleDescriptor> allYModules,
                                     final ModifiableModuleModel rootProjectModifiableModel,
-                                    final ModuleDescriptor moduleDescriptor, final @NotNull ApplicationSettings appSettings
+                                    final ModuleDescriptor moduleDescriptor,
+                                    final @NotNull ApplicationSettings appSettings
     ) {
         indicator.setText(message("hybris.project.import.module.import", moduleDescriptor.getName()));
         indicator.setText2(message("hybris.project.import.module.settings"));
@@ -284,8 +285,7 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
 
         configuratorFactory.getModuleSettingsConfigurator().configure(moduleDescriptor, javaModule);
 
-        final ModifiableRootModel modifiableRootModel = modifiableModelsProvider.getModifiableRootModel(javaModule);
-        final ModifiableFacetModel modifiableFacetModel = modifiableModelsProvider.getModifiableFacetModel(javaModule);
+        final var modifiableRootModel = modifiableModelsProvider.getModifiableRootModel(javaModule);
 
         indicator.setText2(message("hybris.project.import.module.sdk"));
         ClasspathStorage.setStorageType(modifiableRootModel, ClassPathStorageUtil.DEFAULT_STORAGE);
@@ -298,10 +298,19 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
         configuratorFactory.getCompilerOutputPathsConfigurator().configure(indicator, modifiableRootModel, moduleDescriptor);
 
         indicator.setText2(message("hybris.project.import.module.facet"));
-        for (final FacetConfigurator facetConfigurator : configuratorFactory.getFacetConfigurators()) {
-            facetConfigurator.configure(hybrisProjectDescriptor, modifiableFacetModel, moduleDescriptor, javaModule, modifiableRootModel);
-        }
+        configureModuleFacet(moduleDescriptor, javaModule, modifiableRootModel, modifiableModelsProvider);
         return javaModule;
+    }
+
+    private void configureModuleFacet(
+        final ModuleDescriptor moduleDescriptor, final Module module,
+        final ModifiableRootModel modifiableRootModel, final IdeModifiableModelsProvider modifiableModelsProvider
+    ) {
+        final var modifiableFacetModel = modifiableModelsProvider.getModifiableFacetModel(module);
+
+        for (final var facetConfigurator : configuratorFactory.getFacetConfigurators()) {
+            facetConfigurator.configure(hybrisProjectDescriptor, modifiableFacetModel, moduleDescriptor, module, modifiableRootModel);
+        }
     }
 
     private List<ModuleDescriptor> getHybrisModuleDescriptors() {
@@ -309,6 +318,7 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
             .filter(e -> !(e instanceof MavenModuleDescriptor)
                 && !(e instanceof EclipseModuleDescriptor)
                 && !(e instanceof GradleModuleDescriptor)
+                && !(e instanceof AngularModuleDescriptor)
             )
             .toList();
     }
@@ -373,6 +383,47 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
         } catch (Exception e) {
             LOG.error("Can not import Gradle modules due to an error.", e);
         }
+    }
+
+    private void configureAngularModules(
+        final @NotNull ProgressIndicator indicator,
+        final GroupModuleConfigurator groupModuleConfigurator,
+        final ApplicationSettings appSettings
+    ) {
+        final var configurator = configuratorFactory.getAngularConfigurator();
+
+        if (configurator == null) return;
+
+        indicator.setText(message("hybris.project.import.angular"));
+
+        final var contentRootConfigurator = configuratorFactory.getContentRootConfigurator();
+        final var modifiableModelsProvider = new IdeModifiableModelsProviderImpl(project);
+        final var rootProjectModifiableModel = model == null
+            ? modifiableModelsProvider.getModifiableModuleModel()
+            : model;
+
+        final var modules = hybrisProjectDescriptor
+            .getModulesChosenForImport()
+            .stream()
+            .filter(AngularModuleDescriptor.class::isInstance)
+            .map(AngularModuleDescriptor.class::cast)
+            .peek(module -> groupModuleConfigurator.process(module, module.getDirectDependencies()))
+            .collect(Collectors.toMap(Function.identity(), module -> rootProjectModifiableModel.newModule(
+                module.ideaModuleFile().getAbsolutePath(),
+                StdModuleTypes.JAVA.getId()
+            )));
+
+        modules.forEach((descriptor, module) -> {
+            final var modifiableRootModel = modifiableModelsProvider.getModifiableRootModel(module);
+
+            contentRootConfigurator.configure(indicator, modifiableRootModel, descriptor, appSettings);
+            configureModuleFacet(descriptor, module, modifiableRootModel, modifiableModelsProvider);
+        });
+
+        final var application = ApplicationManager.getApplication();
+        application.invokeAndWait(() -> application.runWriteAction(modifiableModelsProvider::commit));
+
+//        configurator.configure(project, modules.values());
     }
 
     private void updateProjectDictionary(
@@ -540,9 +591,9 @@ public class ImportProjectProgressModalWindow extends Task.Modal {
     }
 
     private void excludeFrameworkDetection(final Project project, final FacetTypeId facetTypeId) {
-        final DetectionExcludesConfiguration configuration = DetectionExcludesConfiguration.getInstance(project);
-        final FacetType facetType = FacetTypeRegistry.getInstance().findFacetType(facetTypeId);
-        final FrameworkType frameworkType = FrameworkDetectionUtil.findFrameworkTypeForFacetDetector(facetType);
+        final var configuration = DetectionExcludesConfiguration.getInstance(project);
+        final var facetType = FacetTypeRegistry.getInstance().findFacetType(facetTypeId);
+        final var frameworkType = FrameworkDetectionUtil.findFrameworkTypeForFacetDetector(facetType);
 
         if (frameworkType != null) {
             configuration.addExcludedFramework(frameworkType);

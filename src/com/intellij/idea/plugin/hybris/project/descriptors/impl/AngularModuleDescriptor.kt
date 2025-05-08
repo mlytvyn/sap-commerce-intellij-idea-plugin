@@ -18,15 +18,22 @@
 package com.intellij.idea.plugin.hybris.project.descriptors.impl
 
 import com.intellij.idea.plugin.hybris.project.descriptors.HybrisProjectDescriptor
+import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptor
 import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptorType
 import java.io.File
 
-class EclipseModuleDescriptor(
+class AngularModuleDescriptor(
     moduleRootDirectory: File,
     rootProjectDescriptor: HybrisProjectDescriptor,
-    name: String,
-    override val descriptorType: ModuleDescriptorType = ModuleDescriptorType.ECLIPSE
+    name: String = moduleRootDirectory.name,
+    override val descriptorType: ModuleDescriptorType = ModuleDescriptorType.ANGULAR
 ) : RootModuleDescriptor(moduleRootDirectory, rootProjectDescriptor, name) {
 
     override fun isPreselected() = true
+    override fun initDependencies(moduleDescriptors: Map<String, ModuleDescriptor>) = moduleDescriptors.values
+        .filter { this.moduleRootDirectory.toString().startsWith(it.moduleRootDirectory.toString()) }
+        .filter { this != it }
+        .map { it.name }
+        .take(1)
+        .toSet()
 }

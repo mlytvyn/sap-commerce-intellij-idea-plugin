@@ -1,7 +1,7 @@
 /*
  * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
  * Copyright (C) 2014-2016 Alexander Bartash <AlexanderBartash@gmail.com>
- * Copyright (C) 2019-2024 EPAM Systems <hybrisideaplugin@epam.com> and contributors
+ * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,10 +23,7 @@ import com.intellij.ide.util.projectWizard.WizardContext
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptor
 import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptorImportStatus
-import com.intellij.idea.plugin.hybris.project.descriptors.impl.CCv2ModuleDescriptor
-import com.intellij.idea.plugin.hybris.project.descriptors.impl.EclipseModuleDescriptor
-import com.intellij.idea.plugin.hybris.project.descriptors.impl.GradleModuleDescriptor
-import com.intellij.idea.plugin.hybris.project.descriptors.impl.MavenModuleDescriptor
+import com.intellij.idea.plugin.hybris.project.descriptors.impl.*
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.ui.IdeBorderFactory
 import javax.swing.Icon
@@ -40,10 +37,11 @@ class SelectOtherModulesToImportStep(context: WizardContext) : AbstractSelectMod
         for (index in 0 until fileChooser.elementCount) {
             val descriptor = fileChooser.getElementAt(index)
 
-            if (descriptor is EclipseModuleDescriptor || descriptor is CCv2ModuleDescriptor) {
+            if (descriptor.isPreselected()) {
                 fileChooser.setElementMarked(descriptor, true)
             }
-            if (descriptor is CCv2ModuleDescriptor && descriptor.isPreselected()) {
+
+            if (descriptor is CCv2ModuleDescriptor || descriptor is AngularModuleDescriptor) {
                 descriptor.importStatus = ModuleDescriptorImportStatus.MANDATORY
             }
         }
@@ -56,6 +54,7 @@ class SelectOtherModulesToImportStep(context: WizardContext) : AbstractSelectMod
             is MavenModuleDescriptor -> HybrisIcons.Module.MAVEN
             is EclipseModuleDescriptor -> HybrisIcons.Module.ECLIPSE
             is GradleModuleDescriptor -> HybrisIcons.Module.GRADLE
+            is AngularModuleDescriptor -> HybrisIcons.Module.ANGULAR
             is CCv2ModuleDescriptor -> HybrisIcons.Module.CCV2
             else -> null
         }
