@@ -156,17 +156,17 @@ class HybrisJUnitExtension : RunConfigurationExtension() {
                 .toIntOrNull() ?: Int.MAX_VALUE
         }
         .map { (key, value) ->
-            val stripQuotesKey = "$key$STRIP_QUOTES_SUFFIX"
-            val shouldStripQuotes = properties[stripQuotesKey]
-                ?.toString()
-                ?.uppercase() == "TRUE"
-
             when {
-                shouldStripQuotes -> value.replace("\"", "").trim()
+                shouldStripQuotes(key, properties) -> value.replace("\"", "").trim()
                 else -> value.trim()
             }
         }
         .toList()
+
+    private fun shouldStripQuotes(key: String, properties: Properties): Boolean =
+        properties["$key$STRIP_QUOTES_SUFFIX"]
+            ?.toString()
+            ?.uppercase() == "TRUE"
 
     private fun addVmParameterIfNotExist(vmParameters: ParametersList, newParam: String) {
         if (!vmParameters.hasParameter(newParam)) {
