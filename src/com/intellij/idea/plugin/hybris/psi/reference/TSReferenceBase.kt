@@ -15,15 +15,21 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+package com.intellij.idea.plugin.hybris.psi.reference
 
-package com.intellij.idea.plugin.hybris.system.cockpitng.psi.reference.result
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiReferenceBase
 
-import com.intellij.idea.plugin.hybris.system.cockpitng.meta.model.CngMetaEditorDefinition
-import com.intellij.psi.ResolveResult
+abstract class TSReferenceBase<PSI : PsiElement> : PsiReferenceBase.Poly<PSI> {
 
-class EditorDefinitionResolveResult(
-    val meta: CngMetaEditorDefinition
-) : ResolveResult {
-    override fun getElement() = meta.retrieveDom()?.id?.xmlAttributeValue
-    override fun isValidResult() = element != null && (meta.retrieveDom()?.isValid ?: false)
+    constructor(owner: PSI) : super(owner, false)
+    constructor(owner: PSI, soft: Boolean) : super(owner, soft)
+    constructor(element: PSI?, rangeInElement: TextRange?) : super(element, rangeInElement, false)
+
+    override fun calculateDefaultRangeInElement() = TextRange.from(0, element.textLength)
+
+    protected val project: Project
+        get() = element.project
 }
