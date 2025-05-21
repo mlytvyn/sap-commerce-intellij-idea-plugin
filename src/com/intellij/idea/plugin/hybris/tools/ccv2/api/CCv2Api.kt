@@ -114,7 +114,7 @@ class CCv2Api {
         ?.map { CCv2DataBackupDto.map(it) }
         ?: emptyList()
 
-    suspend fun fetchEnvironmentsBuilds(
+    fun fetchEnvironmentsBuilds(
         ccv2Token: String,
         subscription: CCv2Subscription,
         environments: Collection<CCv2EnvironmentDto>,

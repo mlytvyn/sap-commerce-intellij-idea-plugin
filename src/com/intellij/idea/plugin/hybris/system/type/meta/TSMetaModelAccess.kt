@@ -20,12 +20,15 @@ package com.intellij.idea.plugin.hybris.system.type.meta
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.root
 import com.intellij.idea.plugin.hybris.common.yExtensionName
+import com.intellij.idea.plugin.hybris.system.TSModificationTracker
 import com.intellij.idea.plugin.hybris.system.type.meta.impl.TSMetaModelNameProvider
 import com.intellij.idea.plugin.hybris.system.type.meta.model.*
 import com.intellij.idea.plugin.hybris.system.type.model.EnumType
 import com.intellij.idea.plugin.hybris.system.type.model.ItemType
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbService
@@ -59,11 +62,10 @@ import kotlin.io.path.inputStream
  * It is quite important to take into account the possibility of interruption of the process, especially during Inspection and other heavy operations
  */
 @Service(Service.Level.PROJECT)
-class TSMetaModelAccess(private val project: Project, private val coroutineScope: CoroutineScope) {
+class TSMetaModelAccess(private val project: Project, private val coroutineScope: CoroutineScope) : Disposable {
 
     companion object {
         val TOPIC = Topic("HYBRIS_TYPE_SYSTEM_LISTENER", TSChangeListener::class.java)
-        private val SINGLE_MODEL_CACHE_KEY = Key.create<CachedValue<TSMetaModel>>("SINGLE_TS_MODEL_CACHE")
 
         @JvmStatic
         fun getInstance(project: Project): TSMetaModelAccess = project.getService(TSMetaModelAccess::class.java)
@@ -100,6 +102,7 @@ class TSMetaModelAccess(private val project: Project, private val coroutineScope
 
     private val myGlobalMetaModelCache = CachedValuesManager.getManager(project).createCachedValue(
         {
+            val modificationTracker = project.service<TSModificationTracker>()
             val localMetaModels = runBlocking {
                 withBackgroundProgress(project, "Re-building Type System...", true) {
                     val collectedDependencies = TSMetaModelCollector.getInstance(project).collectDependencies()
@@ -109,7 +112,8 @@ class TSMetaModelAccess(private val project: Project, private val coroutineScope
                             .map {
                                 progressReporter.sizedStep(1, "Processing: ${it.name}...") {
                                     this.async {
-                                        retrieveSingleMetaModelPerFile(it)
+                                        val cacheKey = modificationTracker.getCacheKey(it)
+                                        retrieveSingleMetaModelPerFile(modificationTracker, it, cacheKey)
                                     }
                                 }
                             }
@@ -123,9 +127,11 @@ class TSMetaModelAccess(private val project: Project, private val coroutineScope
                 }
             }
 
-            val dependencies = localMetaModels
-                .map { it.virtualFile }
-                .toTypedArray()
+            val dependencies = (
+                listOf(modificationTracker) + localMetaModels
+                    .map { it.virtualFile }
+                )
+                .toTypedArray<ModificationTracker>()
 
             CachedValueProvider.Result.create(myGlobalMetaModel, dependencies.ifEmpty { ModificationTracker.EVER_CHANGED })
         }, false
@@ -212,15 +218,20 @@ class TSMetaModelAccess(private val project: Project, private val coroutineScope
     private fun <T : TSGlobalMetaClassifier<*>> findMetaByName(metaType: TSMetaType, name: String?): T? =
         getMetaModel().getMetaType<T>(metaType)[name]
 
-    private fun retrieveSingleMetaModelPerFile(psiFile: PsiFile): TSMetaModel = CachedValuesManager.getManager(project).getCachedValue(
-        psiFile, SINGLE_MODEL_CACHE_KEY,
-        {
-            val value = runBlocking {
-                TSMetaModelProcessor.getInstance(project).process(this, psiFile)
-            }
+    private fun retrieveSingleMetaModelPerFile(modificationTracker: TSModificationTracker, psiFile: PsiFile, cacheKey: Key<CachedValue<TSMetaModel>>): TSMetaModel =
+        CachedValuesManager.getManager(project).getCachedValue(
+            modificationTracker, cacheKey,
+            {
+                val value = runBlocking {
+                    TSMetaModelProcessor.getInstance(project).process(this, psiFile)
+                }
 
-            CachedValueProvider.Result.create(value, psiFile)
-        },
-        false
-    )
+                CachedValueProvider.Result.create(value, psiFile.virtualFile)
+            },
+            false
+        )
+
+    override fun dispose() {
+        myGlobalMetaModel.dispose()
+    }
 }
