@@ -19,9 +19,9 @@ package com.intellij.idea.plugin.hybris.vfs.listeners
 
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.settings.components.ProjectSettingsComponent
-import com.intellij.idea.plugin.hybris.system.BSModificationTracker
-import com.intellij.idea.plugin.hybris.system.MetaModelModificationTracker
-import com.intellij.idea.plugin.hybris.system.TSModificationTracker
+import com.intellij.idea.plugin.hybris.system.meta.BSModificationTracker
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelModificationTracker
+import com.intellij.idea.plugin.hybris.system.meta.TSModificationTracker
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbService
@@ -49,9 +49,10 @@ class MetaSystemsAsyncFileListener : AsyncFileListener {
                     }
                     event.asSafely<VFilePropertyChangeEvent>()
                         ?.takeIf { it.isRename }
-                        ?.oldValue
-                        ?.asSafely<String>()
-                        ?.let(mapToMetaFile)
+                        ?.let {
+                            it.oldValue?.asSafely<String>()?.let(mapToMetaFile)
+                                ?: it.newValue?.asSafely<String>()?.let(mapToMetaFile)
+                        }
                         ?: PathUtil.getFileName(event.path)
                             .let(mapToMetaFile)
                         ?: return@mapNotNull null

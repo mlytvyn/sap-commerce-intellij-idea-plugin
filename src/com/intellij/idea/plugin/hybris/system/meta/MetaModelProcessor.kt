@@ -15,30 +15,27 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+package com.intellij.idea.plugin.hybris.system.meta
 
-package com.intellij.idea.plugin.hybris.system.bean.meta.model
-
-import com.intellij.util.xml.DomAnchor
+import com.intellij.idea.plugin.hybris.psi.util.PsiUtils
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.project.Project
 import com.intellij.util.xml.DomElement
+import kotlinx.coroutines.coroutineScope
 
-interface BSMetaClassifier<DOM : DomElement> {
+abstract class MetaModelProcessor<D : DomElement, M>(private val project: Project) {
 
-    val name: String?
-        get() = null
-    val moduleName: String
-    val extensionName: String
-    val isCustom: Boolean
-    val domAnchor: DomAnchor<DOM>
-    fun retrieveDom(): DOM? = domAnchor.retrieveDomElement()
-}
+    suspend fun process(foundMeta: FoundMeta<D>): M? = coroutineScope {
+        readAction {
+            process(
+                foundMeta.moduleName,
+                foundMeta.extensionName,
+                foundMeta.name,
+                PsiUtils.isCustomExtensionFile(foundMeta.virtualFile, project),
+                foundMeta.rootElement
+            )
+        }
+    }
 
-interface BSGlobalMetaClassifier<DOM : DomElement> : BSMetaClassifier<DOM> {
-    val declarations: MutableSet<out BSMetaClassifier<DOM>>
-    fun retrieveAllDoms(): List<DOM> = declarations
-        .map { it.domAnchor }
-        .mapNotNull { it.retrieveDomElement() }
-}
-
-interface BSTypedClassifier {
-    var flattenType: String?
+    protected abstract fun process(moduleName: String, extensionName: String, fileName: String, custom: Boolean, dom: D): M
 }

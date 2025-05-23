@@ -15,22 +15,30 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 package com.intellij.idea.plugin.hybris.system.bean.meta
 
-import com.intellij.idea.plugin.hybris.system.bean.meta.impl.BSMetaModelBuilder
 import com.intellij.idea.plugin.hybris.system.bean.model.Beans
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelProcessor
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CoroutineScope
 
 @Service(Service.Level.PROJECT)
-class BSMetaModelProcessor(project: Project) : MetaModelProcessor<Beans, BSMetaModel>(project) {
+class BSMetaModelStateService(project: Project, coroutineScope: CoroutineScope) : MetaModelStateService<BSGlobalMetaModel, BSMetaModel, Beans>(
+    project, coroutineScope, "Bean",
+    project.service<BSMetaModelCollector>(),
+    project.service<BSMetaModelProcessor>()
+) {
 
-    override fun process(moduleName: String, extensionName: String, fileName: String, custom: Boolean, dom: Beans): BSMetaModel =
-        with(BSMetaModelBuilder(moduleName, extensionName, fileName, custom)) {
-            withEnumTypes(dom.enums)
-            withBeanTypes(dom.beans)
-            withEventTypes(dom.beans)
-            build()
-        }
+    override fun onCompletion(newState: BSGlobalMetaModel) {
+        project.messageBus.syncPublisher(TOPIC).beanSystemChanged(newState)
+    }
+
+    override suspend fun create(metaModelsToMerge: Collection<BSMetaModel>): BSGlobalMetaModel = BSGlobalMetaModel().also {
+        readAction { BSMetaModelMerger.merge(it, metaModelsToMerge.sortedBy { meta -> !meta.custom }) }
+    }
+
 }

@@ -15,26 +15,30 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 package com.intellij.idea.plugin.hybris.system.type.meta
 
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelProcessor
-import com.intellij.idea.plugin.hybris.system.type.meta.impl.TSMetaModelBuilder
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.model.Items
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CoroutineScope
 
 @Service(Service.Level.PROJECT)
-class TSMetaModelProcessor(project: Project) : MetaModelProcessor<Items, TSMetaModel>(project) {
+class TSMetaModelStateService(project: Project, coroutineScope: CoroutineScope) : MetaModelStateService<TSGlobalMetaModel, TSMetaModel, Items>(
+    project, coroutineScope, "Type",
+    project.service<TSMetaModelCollector>(),
+    project.service<TSMetaModelProcessor>()
+) {
 
-    override fun process(moduleName: String, extensionName: String, fileName: String, custom: Boolean, dom: Items): TSMetaModel =
-        with(TSMetaModelBuilder(moduleName, extensionName, fileName, custom)) {
-            withItemTypes(dom.itemTypes.itemTypes)
-            withItemTypes(dom.itemTypes.typeGroups.flatMap { it.itemTypes })
-            withEnumTypes(dom.enumTypes.enumTypes)
-            withAtomicTypes(dom.atomicTypes.atomicTypes)
-            withCollectionTypes(dom.collectionTypes.collectionTypes)
-            withRelationTypes(dom.relations.relations)
-            withMapTypes(dom.mapTypes.mapTypes)
-            build()
-        }
+    override fun onCompletion(newState: TSGlobalMetaModel) {
+        project.messageBus.syncPublisher(TOPIC).typeSystemChanged(newState)
+    }
+
+    override suspend fun create(metaModelsToMerge: Collection<TSMetaModel>): TSGlobalMetaModel = TSGlobalMetaModel().also {
+        readAction { TSMetaModelMerger.merge(it, metaModelsToMerge.sortedBy { meta -> !meta.custom }) }
+    }
+
 }
