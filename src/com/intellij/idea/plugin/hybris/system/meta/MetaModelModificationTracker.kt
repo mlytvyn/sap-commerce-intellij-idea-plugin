@@ -18,31 +18,12 @@
 
 package com.intellij.idea.plugin.hybris.system.meta
 
-import com.intellij.idea.plugin.hybris.system.bean.meta.BSMetaModel
-import com.intellij.idea.plugin.hybris.system.bean.meta.BSMetaModelStateService
-import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModel
-import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SimpleModificationTracker
+import com.intellij.psi.xml.XmlFile
 
-@Service(Service.Level.PROJECT)
-class TSModificationTracker(project: Project) : MetaModelModificationTracker<TSMetaModel>(project) {
-    override fun updateState(keys: Collection<String>) {
-        project.service<TSMetaModelStateService>().update(keys)
-    }
-}
-
-@Service(Service.Level.PROJECT)
-class BSModificationTracker(project: Project) : MetaModelModificationTracker<BSMetaModel>(project) {
-    override fun updateState(keys: Collection<String>) {
-        project.service<BSMetaModelStateService>().update(keys)
-    }
-}
-
-abstract class MetaModelModificationTracker<T>(
-    protected val project: Project
+abstract class MetaModelModificationTracker(
+    protected val project: Project,
 ) : SimpleModificationTracker() {
 
     fun resetCache(keys: Collection<String>) {
@@ -51,6 +32,10 @@ abstract class MetaModelModificationTracker<T>(
         incModificationCount()
     }
 
+    fun resetCache(vararg xmlFiles: XmlFile) = getKeys(*xmlFiles)
+        ?.let { resetCache(it) }
+
+    abstract fun getKeys(vararg xmlFiles: XmlFile): Collection<String>?
     abstract fun updateState(keys: Collection<String>)
 
 }

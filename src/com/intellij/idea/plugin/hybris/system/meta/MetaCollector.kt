@@ -19,6 +19,7 @@
 package com.intellij.idea.plugin.hybris.system.meta
 
 import com.intellij.idea.plugin.hybris.common.yExtensionName
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
@@ -33,43 +34,52 @@ import com.intellij.util.xml.DomManager
 import com.intellij.util.xml.stubs.index.DomElementClassIndex
 import kotlinx.collections.immutable.toImmutableSet
 
-data class FoundMeta<T : DomElement>(
+data class Meta<T : DomElement>(
     val moduleName: String,
     val extensionName: String,
     val psiFile: PsiFile,
     val virtualFile: VirtualFile,
     val rootElement: T,
-    val name: String = virtualFile.name
+    val name: String,
 )
 
-abstract class MetaModelCollector<T : DomElement>(private val project: Project, private val clazz: Class<T>) {
+abstract class MetaCollector<T : DomElement>(
+    protected val project: Project,
+    private val clazz: Class<T>,
+    private val takeIf: (T) -> Boolean = { true },
+    private val nameProvider: (VirtualFile) -> String,
+) {
 
     private val myDomManager: DomManager = DomManager.getDomManager(project)
     private val projectFileIndex = ProjectFileIndex.getInstance(project)
 
-    fun collectDependencies(): Set<FoundMeta<T>> {
-        val files = HashSet<FoundMeta<T>>()
+    open suspend fun collectDependencies(): Set<Meta<T>> {
+        val files = HashSet<Meta<T>>()
 
-        StubIndex.getInstance().processElements(
-            DomElementClassIndex.KEY,
-            clazz.name,
-            project,
-            ProjectScope.getAllScope(project),
-            PsiFile::class.java,
-            object : Processor<PsiFile> {
-                override fun process(psiFile: PsiFile): Boolean {
-                    val xmlFile = psiFile.asSafely<XmlFile>() ?: return true
-                    val virtualFile = xmlFile.virtualFile ?: return true
-                    val module = projectFileIndex.getModuleForFile(virtualFile) ?: return true
-                    val rootElement = myDomManager.getFileElement(psiFile, clazz)?.rootElement
-                        ?: return true
+        readAction {
+            StubIndex.getInstance().processElements(
+                DomElementClassIndex.KEY,
+                clazz.name,
+                project,
+                ProjectScope.getAllScope(project),
+                PsiFile::class.java,
+                object : Processor<PsiFile> {
+                    override fun process(psiFile: PsiFile): Boolean {
+                        val xmlFile = psiFile.asSafely<XmlFile>() ?: return true
+                        val virtualFile = xmlFile.virtualFile ?: return true
+                        val module = projectFileIndex.getModuleForFile(virtualFile) ?: return true
+                        val rootElement = myDomManager.getFileElement(psiFile, clazz)
+                            ?.rootElement
+                            ?.takeIf(takeIf)
+                            ?: return true
 
-                    files.add(FoundMeta(module.name, module.yExtensionName(), psiFile, virtualFile, rootElement))
+                        files.add(Meta(module.name, module.yExtensionName(), psiFile, virtualFile, rootElement, nameProvider.invoke(virtualFile)))
 
-                    return true
+                        return true
+                    }
                 }
-            }
-        )
+            )
+        }
 
         return files.toImmutableSet()
     }

@@ -15,18 +15,12 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.system.cockpitng.meta.model
+package com.intellij.idea.plugin.hybris.system.bean.meta
 
-import com.intellij.idea.plugin.hybris.system.cockpitng.model.core.WidgetExtension
+import com.intellij.idea.plugin.hybris.system.bean.model.Beans
+import com.intellij.idea.plugin.hybris.system.meta.MetaCollector
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
 
-class CngMetaWidgetExtension(
-    dom: WidgetExtension,
-    fileName: String,
-    custom: Boolean,
-    val widgets: Collection<CngMetaWidget> = emptyList(),
-) : CngMeta<WidgetExtension>(dom, fileName, custom) {
-
-    val id: String = dom.widgetId.stringValue!!
-
-    override fun toString() = id
-}
+@Service(Service.Level.PROJECT)
+class BSMetaCollector(project: Project) : MetaCollector<Beans>(project, Beans::class.java, nameProvider = BSModificationTracker.KEY_PROVIDER)

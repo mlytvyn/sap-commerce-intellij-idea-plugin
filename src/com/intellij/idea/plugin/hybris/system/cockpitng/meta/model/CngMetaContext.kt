@@ -15,12 +15,23 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.system.bean.meta
+package com.intellij.idea.plugin.hybris.system.cockpitng.meta.model
 
-import com.intellij.idea.plugin.hybris.system.bean.model.Beans
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelCollector
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.project.Project
+import com.intellij.idea.plugin.hybris.system.cockpitng.model.config.Context
 
-@Service(Service.Level.PROJECT)
-class BSMetaModelCollector(myProject: Project) : MetaModelCollector<Beans>(myProject, Beans::class.java)
+class CngMetaContext(
+    dom: Context,
+    fileName: String,
+    val name: String,
+    custom: Boolean,
+) : CngMeta<Context>(dom, fileName, custom) {
+
+    val attributes = dom.xmlTag
+        ?.attributes
+        ?.filter { it.value != null }
+        ?.associate { it.name to it.value!! }
+        ?: emptyMap()
+
+    override fun toString() = name
+
+}

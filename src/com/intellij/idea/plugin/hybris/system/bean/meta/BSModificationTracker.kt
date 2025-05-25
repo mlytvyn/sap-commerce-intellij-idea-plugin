@@ -15,17 +15,28 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.system.cockpitng.meta.model
 
-import com.intellij.idea.plugin.hybris.system.cockpitng.model.config.Config
+package com.intellij.idea.plugin.hybris.system.bean.meta
+
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelModificationTracker
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.xml.XmlFile
 
-class CngConfigMeta(
-    virtualFile: VirtualFile,
-    myDom: Config,
-    val contexts: List<CngContextMeta>
-) : CngMeta<Config>(virtualFile, myDom) {
+@Service(Service.Level.PROJECT)
+class BSModificationTracker(project: Project) : MetaModelModificationTracker(project) {
 
-    override fun toString() = virtualFile.name
+    private val stateService = project.service<BSMetaModelStateService>()
 
+    override fun getKeys(vararg xmlFiles: XmlFile): Collection<String>? = xmlFiles.map { it.name }
+
+    override fun updateState(keys: Collection<String>) {
+        stateService.update(keys)
+    }
+
+    companion object {
+        val KEY_PROVIDER: (VirtualFile) -> String = { it.name }
+    }
 }

@@ -15,12 +15,28 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 package com.intellij.idea.plugin.hybris.system.type.meta
 
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelCollector
-import com.intellij.idea.plugin.hybris.system.type.model.Items
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelModificationTracker
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.xml.XmlFile
 
 @Service(Service.Level.PROJECT)
-class TSMetaModelCollector(myProject: Project) : MetaModelCollector<Items>(myProject, Items::class.java)
+class TSModificationTracker(project: Project) : MetaModelModificationTracker(project) {
+
+    private val stateService = project.service<TSMetaModelStateService>()
+
+    override fun getKeys(vararg xmlFiles: XmlFile): Collection<String>? = xmlFiles.map  { it.name }
+
+    override fun updateState(keys: Collection<String>) {
+        stateService.update(keys)
+    }
+
+    companion object {
+        val KEY_PROVIDER: (VirtualFile) -> String = { it.name }
+    }
+}

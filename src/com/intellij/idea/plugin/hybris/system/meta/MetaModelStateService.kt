@@ -19,7 +19,6 @@
 package com.intellij.idea.plugin.hybris.system.meta
 
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
@@ -44,7 +43,7 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
     protected val project: Project,
     private val coroutineScope: CoroutineScope,
     private val systemName: String,
-    private val metaModelCollector: MetaModelCollector<D>,
+    private val metaCollector: MetaCollector<D>,
     private val metaModelProcessor: MetaModelProcessor<D, M>
 ) : Disposable {
 
@@ -54,8 +53,8 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
 
     protected val _metaModelsState = MutableStateFlow<Map<String, M>>(emptyMap())
     protected val _metaModelState = MutableStateFlow(CachedState<G>(null, computed = false, computing = false))
-    protected val _recomputeMetas = MutableStateFlow<Collection<String>?>(null)
-    protected val recomputeMetas = _recomputeMetas.asStateFlow()
+    protected val _recomputeMetasState = MutableStateFlow<Collection<String>?>(null)
+    protected val recomputeMetasState = _recomputeMetasState.asStateFlow()
     protected val metaModelsState = _metaModelsState.asStateFlow()
     protected val metaModelState = _metaModelState.asStateFlow()
 
@@ -69,7 +68,7 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
     fun initialized() = metaModelState.value.computed
 
     fun get(): G {
-        val modifiedMetas = recomputeMetas.value
+        val modifiedMetas = recomputeMetasState.value
 
         if (modifiedMetas == null) {
             return getCurrentState()
@@ -87,7 +86,7 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
         DumbService.Companion.getInstance(project).runWhenSmart {
             coroutineScope.launch {
                 val newState = withBackgroundProgress(project, "Re-building $systemName System...", true) {
-                    val collectedDependencies = readAction { metaModelCollector.collectDependencies() }
+                    val collectedDependencies = metaCollector.collectDependencies()
 
                     val localMetaModels = reportProgress(collectedDependencies.size) { progressReporter ->
                         collectedDependencies
@@ -115,7 +114,7 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
                 }
 
                 _metaModelState.value = CachedState(newState, computed = true, computing = false)
-                _recomputeMetas.value = null
+                _recomputeMetasState.value = null
 
                 onCompletion(newState)
             }
@@ -123,11 +122,11 @@ abstract class MetaModelStateService<G, M, D : DomElement>(
     }
 
     fun update(metaModels: Collection<String>) {
-        val metas = _recomputeMetas.value
+        val metas = _recomputeMetasState.value
         if (metas == null) {
-            _recomputeMetas.value = metaModels.toSet()
+            _recomputeMetasState.value = metaModels.toSet()
         } else {
-            _recomputeMetas.value = (metas + metaModels).toSet()
+            _recomputeMetasState.value = (metas + metaModels).toSet()
         }
     }
 
