@@ -17,7 +17,9 @@
  */
 package com.intellij.idea.plugin.hybris.system.type.meta.model
 
+import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.system.type.model.MapType
+import javax.swing.Icon
 
 interface TSMetaMap : TSMetaClassifier<MapType> {
 
@@ -29,5 +31,7 @@ interface TSMetaMap : TSMetaClassifier<MapType> {
 }
 
 interface TSGlobalMetaMap : TSMetaMap, TSGlobalMetaClassifier<MapType>, TSTypedClassifier {
+    override val icon: Icon
+        get() = HybrisIcons.TypeSystem.Types.MAP
     override val declarations: MutableSet<TSMetaMap>
 }
