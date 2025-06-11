@@ -18,7 +18,7 @@
 package com.intellij.idea.plugin.hybris.impex.psi.references
 
 import com.intellij.codeInsight.highlighting.HighlightedReference
-import com.intellij.idea.plugin.hybris.impex.psi.ImpexSubTypeName
+import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.psi.reference.TSReferenceBase
 import com.intellij.idea.plugin.hybris.psi.util.PsiUtils
 import com.intellij.idea.plugin.hybris.system.type.codeInsight.lookup.TSLookupElementFactory
@@ -29,13 +29,14 @@ import com.intellij.idea.plugin.hybris.system.type.psi.reference.result.ItemReso
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
+import com.intellij.psi.PsiElement
 import com.intellij.psi.ResolveResult
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.ParameterizedCachedValue
 import com.intellij.psi.util.ParameterizedCachedValueProvider
 
-class ImpexTSSubTypeItemReference(owner: ImpexSubTypeName) : TSReferenceBase<ImpexSubTypeName>(owner), HighlightedReference {
+class ImpexAclTypeReference(owner: PsiElement) : TSReferenceBase<PsiElement>(owner), HighlightedReference {
 
     override fun getVariants() = getAllowedVariants(element)
         .mapNotNull { TSLookupElementFactory.build(it) }
@@ -51,33 +52,32 @@ class ImpexTSSubTypeItemReference(owner: ImpexSubTypeName) : TSReferenceBase<Imp
     }
 
     companion object {
-        @JvmStatic
-        val CACHE_KEY = Key.create<ParameterizedCachedValue<Array<ResolveResult>, ImpexTSSubTypeItemReference>>("HYBRIS_TS_SUB_TYPE_CACHED_REFERENCE")
+        private val CACHE_KEY = Key.create<ParameterizedCachedValue<Array<ResolveResult>, ImpexAclTypeReference>>("HYBRIS_TS_CACHED_REFERENCE")
 
-        private val provider = ParameterizedCachedValueProvider<Array<ResolveResult>, ImpexTSSubTypeItemReference> { ref ->
+        private val provider = ParameterizedCachedValueProvider<Array<ResolveResult>, ImpexAclTypeReference> { ref ->
             val lookingForName = ref.value
             val project = ref.project
-            val metaService = TSMetaModelAccess.getInstance(project)
 
-            val result: Array<ResolveResult> = metaService.findMetaItemByName(lookingForName)
+            val results: Array<ResolveResult> = TSMetaModelAccess.getInstance(project).findMetaItemByName(lookingForName)
                 ?.takeIf { getAllowedVariants(ref.element).contains(it) }
                 ?.declarations
-                ?.map { ItemResolveResult(it) }
+                ?.map { meta -> ItemResolveResult(meta) }
                 ?.toTypedArray()
                 ?: ResolveResult.EMPTY_ARRAY
 
             // no need to track with PsiModificationTracker.MODIFICATION_COUNT due manual cache reset via custom Mixin
             CachedValueProvider.Result.create(
-                result,
+                results,
                 project.service<TSModificationTracker>()
             )
         }
 
-        private fun getAllowedVariants(element: ImpexSubTypeName): Collection<TSGlobalMetaItem> = element.headerTypeName
-            ?.text
-            ?.let { TSMetaModelAccess.getInstance(element.project).findMetaItemByName(it) }
-            ?.hierarchy
-            ?: emptyList()
-
+        private fun getAllowedVariants(element: PsiElement): Collection<TSGlobalMetaItem> = with(TSMetaModelAccess.getInstance(element.project)) {
+            listOfNotNull(
+                findMetaItemByName(HybrisConstants.TS_TYPE_USER_GROUP),
+                findMetaItemByName(HybrisConstants.TS_TYPE_USER)
+            )
+                .flatMap { it.hierarchy }
+        }
     }
 }
