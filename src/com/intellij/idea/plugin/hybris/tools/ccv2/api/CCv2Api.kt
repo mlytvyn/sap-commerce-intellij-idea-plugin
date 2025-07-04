@@ -199,7 +199,7 @@ class CCv2Api {
                     "https://${HybrisConstants.CCV2_DOMAIN}/subscription/$subscriptionCode/applications/commerce-cloud/environments/$environmentCode/deployments/$code"
                 else null
 
-                cCv2DeploymentDto(code, deployment, environmentCode, link)
+                ccv2DeploymentDto(code, deployment, environmentCode, link)
             }
             ?: emptyList()
     }
@@ -221,7 +221,7 @@ class CCv2Api {
                     "https://${HybrisConstants.CCV2_DOMAIN}/subscription/${subscription.id}/applications/commerce-cloud/environments/$environmentCode/deployments/$code"
                 else null
 
-                cCv2DeploymentDto(code, deployment, environmentCode, link)
+                ccv2DeploymentDto(code, deployment, environmentCode, link)
             }
             ?: emptyList()
     }
@@ -320,7 +320,7 @@ class CCv2Api {
         .value
         .let { serviceProperties.parseResponse(it) }
 
-    private fun cCv2DeploymentDto(
+    private fun ccv2DeploymentDto(
         code: String?,
         deployment: DeploymentDetailDTO,
         environmentCode: String?,
