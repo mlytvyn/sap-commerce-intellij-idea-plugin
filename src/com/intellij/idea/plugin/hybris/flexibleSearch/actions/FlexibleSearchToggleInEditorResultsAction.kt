@@ -15,22 +15,28 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.impex.actions
+package com.intellij.idea.plugin.hybris.flexibleSearch.actions
 
-import com.intellij.idea.plugin.hybris.actions.AbstractExecuteAction
-import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
-import com.intellij.idea.plugin.hybris.impex.file.ImpexFileType
+import com.intellij.idea.plugin.hybris.flexibleSearch.editor.flexibleSearchSplitEditor
 import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.ToggleAction
 
-class ImpExExecuteAction : AbstractExecuteAction(
-    ImpexFileType.defaultExtension,
-    HybrisConstants.CONSOLE_TITLE_IMPEX,
-    message("hybris.impex.actions.execute_query"),
-    message("hybris.impex.actions.execute_query.description"),
-    HybrisIcons.Console.Actions.EXECUTE
+class FlexibleSearchToggleInEditorResultsAction : ToggleAction(
+    message("hybris.fxs.actions.in_editor_results"),
+    message("hybris.fxs.actions.in_editor_results.description"),
+    HybrisIcons.FlexibleSearch.TOGGLE_IN_EDITOR_RESULTS
 ) {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
+
+    override fun isSelected(e: AnActionEvent): Boolean = e.flexibleSearchSplitEditor()?.inEditorResults
+        ?: false
+
+    override fun setSelected(e: AnActionEvent, state: Boolean) {
+        e.flexibleSearchSplitEditor()?.inEditorResults = state
+    }
+
 }

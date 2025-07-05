@@ -1,7 +1,7 @@
 /*
- * This file is part of "SAP Commerce Developers Toolset" plugin for Intellij IDEA.
+ * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
  * Copyright (C) 2014-2016 Alexander Bartash <AlexanderBartash@gmail.com>
- * Copyright (C) 2019-2023 EPAM Systems <hybrisideaplugin@epam.com> and contributors
+ * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,8 +19,10 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.http.flexibleSearch;
 
+import com.intellij.idea.plugin.hybris.common.HybrisConstants;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -28,8 +30,12 @@ public class TableBuilder {
 
     private final List<String[]> rows = new LinkedList<>();
 
-    public void addRow(final String... cols) {
-        rows.add(cols);
+    public void addHeaders(final Collection<String> headers) {
+        addRow(headers);
+    }
+
+    public void addRow(final Collection<String> cols) {
+        rows.add(cols.toArray(new String[]{}));
     }
 
     private int[] colWidths() {
@@ -59,13 +65,18 @@ public class TableBuilder {
 
         final int[] colWidths = colWidths();
 
-        for (String[] row : rows) {
+        for (final String[] row : rows) {
             for (int colNum = 0; colNum < row.length; colNum++) {
                 buf.append(
                     StringUtils.rightPad(
-                        StringUtils.defaultString(
-                            row[colNum]), colWidths[colNum]));
-                buf.append("| ");
+                        StringUtils.defaultString(row[colNum]), colWidths[colNum]
+                    )
+                );
+
+                if (colNum < row.length - 1) {
+                    buf.append(HybrisConstants.FXS_TABLE_RESULT_SEPARATOR)
+                        .append(' ');
+                }
             }
 
             buf.append('\n');
