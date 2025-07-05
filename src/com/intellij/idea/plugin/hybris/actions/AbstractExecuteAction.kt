@@ -30,30 +30,31 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import javax.swing.Icon
 
 abstract class AbstractExecuteAction(
     internal val extension: String,
-    private val consoleName: String
-) : AnAction(), DumbAware {
+    internal val consoleName: String,
+    internal val name: String,
+    internal val description: String,
+    internal val icon: Icon
+) : AnAction(name, description, icon), DumbAware {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
     protected open fun doExecute(e: AnActionEvent, consoleService: HybrisConsoleService) {
-        consoleService.executeStatement()
+        consoleService.executeStatement(e)
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val editor = CommonDataKeys.EDITOR.getData(e.dataContext) ?: return
         val project = e.project ?: return
+        val content = getExecutableContent(editor, e, project)
 
-        val selectionModel = editor.selectionModel
-        var content = selectionModel.selectedText
-        if (content == null || content.trim { it <= ' ' }.isEmpty()) {
-            content = editor.document.text
-        }
+        actionPerformed(e, project, content)
+    }
 
-        content = processContent(e, content, editor, project)
-
+    open fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
         with(HybrisToolWindowService.getInstance(project)) {
             activateToolWindow()
             activateToolWindowTab(HybrisToolWindowFactory.CONSOLES_ID)
@@ -76,9 +77,21 @@ abstract class AbstractExecuteAction(
     open fun processContent(e: AnActionEvent, content: String, editor: Editor, project: Project) = content
 
     override fun update(e: AnActionEvent) {
-        val file = e.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)
-        val enabled = file != null && file.name.endsWith(this.extension)
-        e.presentation.isEnabledAndVisible = enabled
+        e.presentation.isEnabledAndVisible = this.extension == e.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)?.extension
+    }
+
+    private fun getExecutableContent(
+        editor: Editor,
+        e: AnActionEvent,
+        project: Project
+    ): String {
+        val selectionModel = editor.selectionModel
+        var content = selectionModel.selectedText
+        if (content == null || content.trim { it <= ' ' }.isEmpty()) {
+            content = editor.document.text
+        }
+
+        return processContent(e, content, editor, project)
     }
 
     companion object {

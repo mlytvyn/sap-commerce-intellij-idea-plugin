@@ -20,43 +20,25 @@ package com.intellij.idea.plugin.hybris.flexibleSearch.actions
 
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
-import com.intellij.idea.plugin.hybris.flexibleSearch.editor.FlexibleSearchSplitEditor
+import com.intellij.idea.plugin.hybris.flexibleSearch.editor.flexibleSearchSplitEditor
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.project.DumbAware
-import com.intellij.util.asSafely
 
 class FlexibleSearchToggleParametersEditorAction : ToggleAction(
-    message("hybris.fxs.actions.show_parameters"),
-    message("hybris.fxs.actions.show_parameters.description"),
+    message("hybris.fxs.actions.query_parameters"),
+    message("hybris.fxs.actions.query_parameters.description"),
     HybrisIcons.FlexibleSearch.TOGGLE_PARAMETERS_EDITOR
 ), DumbAware {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
-    override fun isSelected(e: AnActionEvent): Boolean {
-        val state = e.getData(PlatformDataKeys.FILE_EDITOR)
-            ?.asSafely<FlexibleSearchSplitEditor>()
-            ?.isParametersPanelVisible() ?: false
-
-        with(e.presentation) {
-            if (state) {
-                text = message("hybris.fxs.actions.hide_parameters")
-                description = message("hybris.fxs.actions.hide_parameters.description")
-            } else {
-                text = message("hybris.fxs.actions.show_parameters")
-                description = message("hybris.fxs.actions.show_parameters.description")
-            }
-        }
-
-        return state
-    }
+    override fun isSelected(e: AnActionEvent): Boolean = e.flexibleSearchSplitEditor()?.isParametersPanelVisible()
+        ?: false
 
     override fun setSelected(e: AnActionEvent, state: Boolean) {
-        e.getData(PlatformDataKeys.FILE_EDITOR)
-            ?.asSafely<FlexibleSearchSplitEditor>()
+        e.flexibleSearchSplitEditor()
             ?.apply {
                 if (state) showParametersPanel()
                 else hideParametersPanel()

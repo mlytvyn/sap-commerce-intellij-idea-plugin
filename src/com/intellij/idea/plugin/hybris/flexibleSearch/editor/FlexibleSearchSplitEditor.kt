@@ -18,30 +18,40 @@
 
 package com.intellij.idea.plugin.hybris.flexibleSearch.editor
 
+import com.intellij.database.editor.CsvTableFileEditor
+import com.intellij.idea.plugin.hybris.flexibleSearch.FlexibleSearchLanguage
 import com.intellij.idea.plugin.hybris.flexibleSearch.psi.FlexibleSearchBindParameter
+import com.intellij.idea.plugin.hybris.grid.GridXSVFormatService
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.meta.TSGlobalMetaModel
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
+import com.intellij.idea.plugin.hybris.tools.remote.http.impex.HybrisHttpResult
 import com.intellij.idea.plugin.hybris.ui.Dsl
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.getPreferredFocusedComponent
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.util.getOrCreateUserData
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.pom.Navigatable
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.testFramework.LightVirtualFile
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.InlineBanner
 import com.intellij.ui.OnePixelSplitter
@@ -63,23 +73,41 @@ import javax.swing.JPanel
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
+fun AnActionEvent.flexibleSearchSplitEditor() = this.getData(PlatformDataKeys.FILE_EDITOR)
+    ?.asSafely<FlexibleSearchSplitEditor>()
+
 class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val project: Project) : UserDataHolderBase(), FileEditor, TextEditor {
 
     private var renderParametersJob: Job? = null
     private var refreshTextEditorJob: Job? = null
     private var parametersPanelDisposable: Disposable? = null
 
-    private val splitter = OnePixelSplitter(false).apply {
+    private val horizontalSplitter = OnePixelSplitter(false).apply {
         isShowDividerControls = true
-        splitterProportionKey = "$javaClass.splitter"
+        splitterProportionKey = "$javaClass.horizontalSplitter"
         setHonorComponentsMinimumSize(true)
 
         firstComponent = textEditor.component
     }
 
-    private val splitPanel = JPanel(BorderLayout()).apply {
-        add(splitter, BorderLayout.CENTER)
+    private val verticalSplitter = OnePixelSplitter(true).apply {
+        isShowDividerControls = true
+        splitterProportionKey = "$javaClass.verticalSplitter"
+        setHonorComponentsMinimumSize(true)
+
+        firstComponent = horizontalSplitter
     }
+
+    private val splitPanel = JPanel(BorderLayout()).apply {
+        add(verticalSplitter, BorderLayout.CENTER)
+    }
+
+    var inEditorResults: Boolean
+        set(state) {
+            putUserData(KEY_IN_EDITOR_RESULTS, state)
+            verticalSplitter.secondComponent?.isVisible = state
+        }
+        get() = getOrCreateUserData(KEY_IN_EDITOR_RESULTS) { false }
 
     init {
         with(project.messageBus.connect(this)) {
@@ -92,7 +120,38 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
         }
     }
 
-    fun getParameters() = if (isParametersPanelVisible()) getUserData(KEY_FLEXIBLE_SEARCH_PARAMETERS) else null
+    fun showExecutionResult(result: HybrisHttpResult) {
+        if (result.errorMessage.isNotBlank()) {
+            verticalSplitter.secondComponent = executionResultsErrorPane(result)
+        } else {
+            executionResultsPane(result)
+        }
+    }
+
+    fun pendingExecutionResult() {
+        if (verticalSplitter.secondComponent == null) return
+
+        verticalSplitter.secondComponent = panel {
+            panel {
+                row {
+                    cell(
+                        InlineBanner(
+                            "Executing HTTP Call to SAP Commerce...",
+                            EditorNotificationPanel.Status.Info
+                        )
+                            .showCloseButton(false)
+                            .setIcon(AnimatedIcon.Default.INSTANCE)
+                    )
+                        .align(Align.FILL)
+                        .resizableColumn()
+                }.topGap(TopGap.SMALL)
+            }
+                .customize(UnscaledGaps(16, 16, 16, 16))
+        }
+    }
+
+    fun getParameters() = if (isParametersPanelVisible()) getUserData(KEY_FLEXIBLE_SEARCH_PARAMETERS)
+    else null
 
     fun getQuery(): String = getParameters()
         ?.sortedByDescending { it.name.length }
@@ -104,12 +163,6 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
             return@let updatedContent
         }
         ?: getText()
-//todo replace by regex
-//                updatedContent.replace("\\?(\\w+)".toRegex()) { matchResult ->
-//                    val key = matchResult.groupValues[1]
-//                    replacements[key] ?: matchResult.value
-//                }
-//
 
     fun refreshParameters(delayMs: Duration = 250.milliseconds) {
         renderParametersJob?.cancel()
@@ -118,7 +171,7 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
 
             if (project.isDisposed || !isParametersPanelVisible()) return@launch
 
-            splitter.secondComponent = buildParametersPanel()
+            horizontalSplitter.secondComponent = buildParametersPanel()
         }
     }
 
@@ -138,26 +191,26 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
     fun hideParametersPanel() {
         parametersPanelDisposable?.apply { Disposer.dispose(this) }
         parametersPanelDisposable = null
-        splitter.secondComponent = null
+        horizontalSplitter.secondComponent = null
 
         component.requestFocus()
-        splitter.firstComponent.requestFocus()
+        horizontalSplitter.firstComponent.requestFocus()
 
         refreshTextEditor()
     }
 
     fun showParametersPanel() {
         with(buildParametersPanel()) {
-            splitter.secondComponent = this
+            horizontalSplitter.secondComponent = this
         }
 
         component.requestFocus()
-        splitter.firstComponent.requestFocus()
+        horizontalSplitter.firstComponent.requestFocus()
 
         refreshTextEditor()
     }
 
-    fun isParametersPanelVisible(): Boolean = splitter.secondComponent != null
+    fun isParametersPanelVisible(): Boolean = horizontalSplitter.secondComponent != null
 
     fun buildParametersPanel(): JComponent? {
         if (project.isDisposed) return null
@@ -354,14 +407,49 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
         .takeIf { selectedText -> selectedText != null && selectedText.trim { it <= ' ' }.isNotEmpty() }
         ?: editor.document.text
 
+    private fun executionResultsPane(result: HybrisHttpResult) {
+        CoroutineScope(Dispatchers.Default).launch {
+            if (project.isDisposed) return@launch
+
+            val lvf = LightVirtualFile(
+                this@FlexibleSearchSplitEditor.file?.name + ".fxs.result.csv",
+                PlainTextFileType.INSTANCE,
+                result.output
+            )
+
+            val format = project.service<GridXSVFormatService>().getFormat(FlexibleSearchLanguage)
+
+            edtWriteAction {
+                val editor = CsvTableFileEditor(project, lvf, format);
+                this@FlexibleSearchSplitEditor.verticalSplitter.secondComponent = editor.component
+            }
+        }
+    }
+
+    private fun executionResultsErrorPane(result: HybrisHttpResult) = panel {
+        panel {
+            row {
+                cell(
+                    InlineBanner(
+                        result.errorMessage,
+                        EditorNotificationPanel.Status.Error
+                    ).showCloseButton(false)
+                )
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }.topGap(TopGap.SMALL)
+        }
+            .customize(UnscaledGaps(16, 16, 16, 16))
+    }
+
     companion object {
         @Serial
         private const val serialVersionUID: Long = -3770395176190649196L
         private val KEY_FLEXIBLE_SEARCH_PARAMETERS: Key<Collection<FlexibleSearchParameter>> = Key.create("flexibleSearch.parameters.key")
+        private val KEY_IN_EDITOR_RESULTS: Key<Boolean> = Key.create("flexibleSearch.in_editor_results.key")
     }
 }
 
-//create a factory method
 data class FlexibleSearchParameter(
     val name: String,
     var value: String = "",

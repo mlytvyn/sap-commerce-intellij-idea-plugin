@@ -22,38 +22,57 @@ import com.intellij.idea.plugin.hybris.actions.AbstractExecuteAction
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
-import com.intellij.idea.plugin.hybris.flexibleSearch.editor.FlexibleSearchSplitEditor
+import com.intellij.idea.plugin.hybris.flexibleSearch.editor.flexibleSearchSplitEditor
 import com.intellij.idea.plugin.hybris.flexibleSearch.file.FlexibleSearchFileType
+import com.intellij.idea.plugin.hybris.project.utils.Plugin
+import com.intellij.idea.plugin.hybris.tools.remote.HybrisRemoteExecutionService
+import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsoleService
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
-import com.intellij.util.asSafely
+import com.intellij.ui.AnimatedIcon
 
 class FlexibleSearchExecuteQueryAction : AbstractExecuteAction(
     FlexibleSearchFileType.defaultExtension,
-    HybrisConstants.CONSOLE_TITLE_FLEXIBLE_SEARCH
+    HybrisConstants.CONSOLE_TITLE_FLEXIBLE_SEARCH,
+    message("hybris.fxs.actions.execute_query"),
+    message("hybris.fxs.actions.execute_query.description"),
+    HybrisIcons.Console.Actions.EXECUTE
 ) {
-
-    init {
-        with(templatePresentation) {
-            text = message("hybris.fxs.actions.execute_query")
-            description = message("hybris.fxs.actions.execute_query.description")
-            icon = HybrisIcons.Console.Actions.EXECUTE
-        }
-    }
 
     override fun update(e: AnActionEvent) {
         super.update(e)
-        val file = e.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)
-        val enabled = file != null && file.name.endsWith(".$extension")
-        e.presentation.isEnabledAndVisible = enabled
+        e.presentation.isEnabledAndVisible = e.presentation.isEnabledAndVisible && Plugin.GRID.isActive()
     }
 
-    override fun processContent(e: AnActionEvent, content: String, editor: Editor, project: Project): String = FileEditorManager.getInstance(project)
-        .getSelectedEditor(editor.virtualFile)
-        .asSafely<FlexibleSearchSplitEditor>()
+    override fun processContent(e: AnActionEvent, content: String, editor: Editor, project: Project): String = e.flexibleSearchSplitEditor()
         ?.getQuery()
         ?: content
+
+    override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
+        val fileEditor = e.flexibleSearchSplitEditor()
+        if (fileEditor?.inEditorResults ?: false) {
+            HybrisConsoleService.getInstance(project)
+                .findConsole(consoleName)
+                ?.let { console ->
+                    e.presentation.isEnabled = false
+                    e.presentation.icon = AnimatedIcon.Default.INSTANCE
+
+                    fileEditor.pendingExecutionResult()
+
+                    project.service<HybrisRemoteExecutionService>()
+                        .execute(console, content)
+                        {
+                            fileEditor.showExecutionResult(it)
+
+                            e.presentation.isEnabled = true
+                            e.presentation.icon = HybrisIcons.Console.Actions.EXECUTE
+                        }
+                }
+                ?: super.actionPerformed(e, project, content)
+        } else {
+            super.actionPerformed(e, project, content)
+        }
+    }
 }

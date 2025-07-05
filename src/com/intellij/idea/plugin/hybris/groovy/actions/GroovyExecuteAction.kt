@@ -35,15 +35,11 @@ import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 
 class GroovyExecuteAction : AbstractExecuteAction(
     GroovyFileType.GROOVY_FILE_TYPE.defaultExtension,
-    HybrisConstants.CONSOLE_TITLE_GROOVY
+    HybrisConstants.CONSOLE_TITLE_GROOVY,
+    "Execute Groovy Script",
+    "Execute Groovy Script on a remote SAP Commerce instance",
+    HybrisIcons.Console.Actions.EXECUTE
 ) {
-    init {
-        with(templatePresentation) {
-            text = "Execute Groovy Script"
-            description = "Execute Groovy Script on a remote SAP Commerce instance"
-            icon = HybrisIcons.Console.Actions.EXECUTE
-        }
-    }
 
     override fun doExecute(e: AnActionEvent, consoleService: HybrisConsoleService) {
         val project = e.project ?: return
@@ -58,6 +54,8 @@ class GroovyExecuteAction : AbstractExecuteAction(
     }
 
     override fun update(e: AnActionEvent) {
+        super.update(e)
+
         val project = e.project ?: return
 
         when (DeveloperSettingsComponent.getInstance(project).state.groovySettings.txMode) {
