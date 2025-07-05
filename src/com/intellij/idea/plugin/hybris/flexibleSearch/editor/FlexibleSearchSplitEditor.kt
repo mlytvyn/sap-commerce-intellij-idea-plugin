@@ -24,6 +24,7 @@ import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.meta.TSGlobalMetaModel
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
 import com.intellij.idea.plugin.hybris.ui.Dsl
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditor
@@ -66,6 +67,7 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
 
     private var renderParametersJob: Job? = null
     private var refreshTextEditorJob: Job? = null
+    private var parametersPanelDisposable: Disposable? = null
 
     private val splitter = OnePixelSplitter(false).apply {
         isShowDividerControls = true
@@ -133,11 +135,20 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
         }
     }
 
-    fun toggleLayout() {
-        if (splitter.secondComponent == null) {
-            splitter.secondComponent = buildParametersPanel()
-        } else {
-            splitter.secondComponent.apply { isVisible = !isVisible }
+    fun hideParametersPanel() {
+        parametersPanelDisposable?.apply { Disposer.dispose(this) }
+        parametersPanelDisposable = null
+        splitter.secondComponent = null
+
+        component.requestFocus()
+        splitter.firstComponent.requestFocus()
+
+        refreshTextEditor()
+    }
+
+    fun showParametersPanel() {
+        with(buildParametersPanel()) {
+            splitter.secondComponent = this
         }
 
         component.requestFocus()
@@ -146,10 +157,17 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
         refreshTextEditor()
     }
 
-    fun isParametersPanelVisible(): Boolean = splitter.secondComponent?.isVisible ?: false
+    fun isParametersPanelVisible(): Boolean = splitter.secondComponent != null
 
     fun buildParametersPanel(): JComponent? {
         if (project.isDisposed) return null
+
+        parametersPanelDisposable?.let { Disposer.dispose(it) }
+
+        val parentDisposable = Disposer.newDisposable().apply {
+            parametersPanelDisposable = this
+            Disposer.register(textEditor, this)
+        }
 
         if (!isTypeSystemInitialized()) return panel {
             row {
@@ -235,7 +253,7 @@ class FlexibleSearchSplitEditor(private val textEditor: TextEditor, private val 
                                                     }
                                                 }
                                                 datePicker.addPropertyChangeListener(listener)
-                                                Disposer.register(textEditor) {
+                                                Disposer.register(parentDisposable) {
                                                     datePicker.removePropertyChangeListener(listener)
                                                 }
                                             }
