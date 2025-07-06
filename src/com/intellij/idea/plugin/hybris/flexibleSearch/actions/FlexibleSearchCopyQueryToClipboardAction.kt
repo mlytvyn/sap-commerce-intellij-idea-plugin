@@ -39,14 +39,14 @@ class FlexibleSearchCopyQueryToClipboardAction : AnAction(
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabled = e.flexibleSearchSplitEditor()?.isParametersPanelVisible()
+        e.presentation.isEnabled = e.flexibleSearchSplitEditor()?.inEditorParameters
             ?: false
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
-        val textToCopy = e.flexibleSearchSplitEditor()?.getQuery()
+        val textToCopy = e.flexibleSearchSplitEditor()?.query
             ?: ""
 
         CopyPasteManager.getInstance().setContents(StringSelection(textToCopy))
