@@ -31,6 +31,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import com.intellij.ui.AnimatedIcon
 
 class FlexibleSearchExecuteQueryAction : AbstractExecuteAction(
@@ -41,33 +42,39 @@ class FlexibleSearchExecuteQueryAction : AbstractExecuteAction(
     HybrisIcons.Console.Actions.EXECUTE
 ) {
 
+    companion object {
+        private val KEY_QUERY_EXECUTING = Key.create<Boolean>("fxs.query.execution.state")
+    }
+
     override fun update(e: AnActionEvent) {
         super.update(e)
+        val queryExecuting = e.flexibleSearchSplitEditor()
+            ?.getUserData(KEY_QUERY_EXECUTING)
+            ?: false
+
         e.presentation.isEnabledAndVisible = e.presentation.isEnabledAndVisible && Plugin.GRID.isActive()
+        e.presentation.isEnabled = e.presentation.isEnabledAndVisible && !queryExecuting
+        e.presentation.disabledIcon = if (queryExecuting) AnimatedIcon.Default.INSTANCE
+        else HybrisIcons.Console.Actions.EXECUTE
     }
 
     override fun processContent(e: AnActionEvent, content: String, editor: Editor, project: Project): String = e.flexibleSearchSplitEditor()
-        ?.getQuery()
+        ?.query
         ?: content
 
     override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
         val fileEditor = e.flexibleSearchSplitEditor()
         if (fileEditor?.inEditorResults ?: false) {
-            HybrisConsoleService.getInstance(project)
-                .findConsole(consoleName)
+            HybrisConsoleService.getInstance(project).findConsole(consoleName)
                 ?.let { console ->
-                    e.presentation.isEnabled = false
-                    e.presentation.icon = AnimatedIcon.Default.INSTANCE
-
-                    fileEditor.pendingExecutionResult()
+                    fileEditor.putUserData(KEY_QUERY_EXECUTING, true)
+                    fileEditor.beforeExecution()
 
                     project.service<HybrisRemoteExecutionService>()
                         .execute(console, content)
                         {
-                            fileEditor.showExecutionResult(it)
-
-                            e.presentation.isEnabled = true
-                            e.presentation.icon = HybrisIcons.Console.Actions.EXECUTE
+                            fileEditor.renderExecutionResult(it)
+                            fileEditor.putUserData(KEY_QUERY_EXECUTING, false)
                         }
                 }
                 ?: super.actionPerformed(e, project, content)
