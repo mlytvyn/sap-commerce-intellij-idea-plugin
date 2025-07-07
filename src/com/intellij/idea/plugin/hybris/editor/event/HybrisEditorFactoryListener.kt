@@ -15,7 +15,8 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.startup.event
+
+package com.intellij.idea.plugin.hybris.editor.event
 
 import com.intellij.idea.plugin.hybris.acl.file.AclFileToolbarInstaller
 import com.intellij.idea.plugin.hybris.acl.file.AclFileType
@@ -27,17 +28,19 @@ import com.intellij.idea.plugin.hybris.impex.file.ImpexFileType
 import com.intellij.idea.plugin.hybris.polyglotQuery.file.PolyglotQueryFileToolbarInstaller
 import com.intellij.idea.plugin.hybris.polyglotQuery.file.PolyglotQueryFileType
 import com.intellij.idea.plugin.hybris.settings.components.ProjectSettingsComponent
-import com.intellij.openapi.editor.ex.util.EditorUtil
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.editor.event.EditorFactoryEvent
+import com.intellij.openapi.editor.event.EditorFactoryListener
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.psi.SingleRootFileViewProvider
+import com.intellij.util.asSafely
 import org.jetbrains.plugins.groovy.GroovyFileType
 
-class HybrisFileEditorManagerListener(private val project: Project) : FileEditorManagerListener {
+class HybrisEditorFactoryListener : EditorFactoryListener {
 
-    override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+    override fun editorCreated(event: EditorFactoryEvent) {
+        val project = event.editor.project ?: return
+        val file = event.editor.virtualFile ?: return
+
         if (SingleRootFileViewProvider.isTooLargeForIntelligence(file)) return
         val projectSettings = ProjectSettingsComponent.getInstance(project)
         if (!projectSettings.isHybrisProject()) return
@@ -51,8 +54,8 @@ class HybrisFileEditorManagerListener(private val project: Project) : FileEditor
             else -> null
         } ?: return
 
-        FileEditorManager.getInstance(project).getAllEditors(file)
-            .firstNotNullOfOrNull { EditorUtil.getEditorEx(it) }
+        event.editor
+            .asSafely<EditorEx>()
             ?.takeIf { it.permanentHeaderComponent == null }
             ?.let { toolbarInstaller.toggleToolbar(project, it) }
     }
