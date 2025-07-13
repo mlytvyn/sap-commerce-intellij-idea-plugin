@@ -35,6 +35,8 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.InlineBanner
+import com.intellij.ui.UIBundle
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.dsl.builder.*
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.util.asSafely
@@ -95,7 +97,10 @@ object FlexibleSearchInEditorParametersView {
                 parametersPanel(queryParameters, fileEditor, parentDisposable)
             }
         }
-            .apply { border = JBUI.Borders.empty(5, 16, 10, 16) }
+            .apply {
+                border = JBUI.Borders.empty(5, 16, 10, 16)
+                registerValidators(parentDisposable)
+            }
             .let { Dsl.scrollPanel(it) }
             .apply {
                 minimumSize = Dimension(minimumSize.width, 165)
@@ -144,26 +149,30 @@ object FlexibleSearchInEditorParametersView {
             queryParameters.forEach { name, parameter ->
                 row {
                     when (parameter.type) {
-                        "java.lang.Float", "java.lang.Double", "java.lang.Byte", "java.lang.Short", "java.lang.Long", "java.lang.Integer",
-                        "float", "double", "byte", "short", "long", "int" -> when {
-                            parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> textArea()
-                                .rows(3)
-                                .comment("Use new line as a value separator.")
+                        Byte::class -> numberTextField(parameter, fileEditor, "-128", "127", "byte")
+                        { it.toByteOrNull() == null }
 
-                            else -> intTextField()
-                        }
-                            .label("${parameter.displayName}:")
-                            .align(AlignX.FILL)
-                            .text(parameter.rawValue?.asSafely<String>() ?: "")
-                            .onChanged { applyValue(fileEditor, parameter, it.text) }
+                        Short::class -> numberTextField(parameter, fileEditor, "-32,768", "32,767", "short")
+                        { it.toShortOrNull() == null }
 
-                        "boolean",
-                        "java.lang.Boolean" -> checkBox(parameter.displayName)
+                        Int::class -> numberTextField(parameter, fileEditor, "-2,147,483,648", "2,147,483,647", "int")
+                        { it.toIntOrNull() == null }
+
+                        Long::class -> numberTextField(parameter, fileEditor, "-9,223,372,036,854,775,808", "9,223,372,036,854,775,807", "long")
+                        { it.toLongOrNull() == null }
+
+                        Float::class -> numberTextField(parameter, fileEditor, "1.4E-45F", "3.4E+38F", "float")
+                        { it.toFloatOrNull() == null }
+
+                        Double::class -> numberTextField(parameter, fileEditor, "4.9E-324", "1.8E+308", "double")
+                        { it.toDoubleOrNull() == null }
+
+                        Boolean::class -> checkBox(parameter.displayName)
                             .align(AlignX.FILL)
                             .selected(parameter.sqlValue == "1")
                             .onChanged { applyValue(fileEditor, parameter, it.isSelected) }
 
-                        "java.util.Date" -> cell(
+                        Date::class -> cell(
                             DatePicker(
                                 parameter.rawValue?.asSafely<Date>(),
                                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
@@ -184,13 +193,8 @@ object FlexibleSearchInEditorParametersView {
                                 }
                             }
 
-                        "String",
-                        "java.lang.String",
-                        "localized:java.lang.String" -> when {
-                            parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> textArea()
-                                .rows(3)
-                                .comment("Use new line as a value separator.")
-
+                        String::class -> when {
+                            parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> multivalueTextArea()
                             else -> textField()
                         }
                             .label("${parameter.displayName}:")
@@ -209,6 +213,28 @@ object FlexibleSearchInEditorParametersView {
             }
         }
     }
+
+    private fun Row.numberTextField(
+        parameter: FlexibleSearchQueryParameter,
+        fileEditor: FlexibleSearchSplitEditor,
+        from: String, to: String,
+        numberType: String,
+        validation: (String) -> Boolean
+    ) = when {
+        parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> multivalueTextArea()
+        else -> textField().validationOnInput {
+            if (validation.invoke(it.text)) error(UIBundle.message("please.enter.a.number.from.0.to.1", from, "$to ($numberType)"))
+            else null
+        }
+    }
+        .label("${parameter.displayName}:")
+        .align(AlignX.FILL)
+        .text(parameter.rawValue?.asSafely<String>() ?: "")
+        .onChanged { applyValue(fileEditor, parameter, it.text) }
+
+    private fun Row.multivalueTextArea(): Cell<JBTextArea> = textArea()
+        .rows(3)
+        .comment("Use new line as a value separator.")
 
     private suspend fun collectQueryParameters(project: Project, fileEditor: FlexibleSearchSplitEditor): Map<String, FlexibleSearchQueryParameter> {
         val currentQueryParameters = fileEditor.queryParameters
