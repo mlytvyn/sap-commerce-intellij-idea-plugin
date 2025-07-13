@@ -21,8 +21,9 @@ package com.intellij.idea.plugin.hybris.tools.remote.http;
 import com.intellij.idea.plugin.hybris.common.HybrisConstants;
 import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
+import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.UserDataHolderBase;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpHeaders;
@@ -60,6 +61,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.io.Serial;
 import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
@@ -74,11 +76,12 @@ import static java.net.HttpURLConnection.HTTP_MOVED_TEMP;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static org.apache.http.HttpVersion.HTTP_1_1;
 
-public abstract class AbstractHybrisHacHttpClient {
+public abstract class AbstractHybrisHacHttpClient extends UserDataHolderBase {
 
     private static final Logger LOG = Logger.getInstance(AbstractHybrisHacHttpClient.class);
-    private static final Key<Replica> REPLICA_KEY = Key.create("hybris.http.replica");
-    private final Project project;
+    private static final Key<RemoteConnectionContext> KEY_REMOTE_CONNECTION_CONTEXT = Key.create("hybris.http.remote.connection.context");
+    @Serial
+    private static final long serialVersionUID = -4915832410081381025L;
 
     public static final int DEFAULT_HAC_TIMEOUT = 6000;
 
@@ -99,40 +102,40 @@ public abstract class AbstractHybrisHacHttpClient {
         }
     };
 
-    private final Map<RemoteConnectionSettings, Map<String, String>> cookiesPerSettings = new WeakHashMap<>();
+    private final Map<Pair<RemoteConnectionSettings, ReplicaContext>, Map<String, String>> cookiesPerSettings = new WeakHashMap<>();
 
-    public AbstractHybrisHacHttpClient(final Project project) {
-        this.project = project;
+    public RemoteConnectionContext getConnectionContext() {
+        return putUserDataIfAbsent(KEY_REMOTE_CONNECTION_CONTEXT, RemoteConnectionContext.Companion.auto());
     }
 
-    @Nullable
-    public Replica getReplica() {
-        return project.getUserData(REPLICA_KEY);
+    public void setConnectionContext(final RemoteConnectionContext remoteConnectionContext) {
+        putUserData(KEY_REMOTE_CONNECTION_CONTEXT, remoteConnectionContext);
     }
 
-    public void setReplica(final Replica replica) {
-        project.putUserData(REPLICA_KEY, replica);
-        cookiesPerSettings.clear();
-    }
-
-    public String login(@NotNull final Project project, @NotNull final RemoteConnectionSettings settings) {
+    public String login(
+        @NotNull final RemoteConnectionSettings settings,
+        @Nullable final ReplicaContext replicaContext,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
+    ) {
         final var hostHacURL = settings.getGeneratedURL();
-        retrieveCookies(hostHacURL, project, settings);
+
+        retrieveCookies(hostHacURL, settings, replicaContext, cookiesKey);
+
         final var cookieName = getCookieName(settings);
-        final var sessionId = Optional.ofNullable(cookiesPerSettings.get(settings))
+        final var sessionId = Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
             .map(it -> it.get(cookieName))
             .orElse(null);
         if (sessionId == null) {
             return "Unable to obtain sessionId for " + hostHacURL;
         }
-        final var csrfToken = getCsrfToken(hostHacURL, settings);
+        final var csrfToken = getCsrfToken(hostHacURL, settings, cookiesKey);
         final var params = List.of(
             new BasicNameValuePair("j_username", settings.getUsername()),
             new BasicNameValuePair("j_password", settings.getPassword()),
             new BasicNameValuePair("_csrf", csrfToken)
         );
         final var loginURL = hostHacURL + "/j_spring_security_check";
-        final HttpResponse response = post(project, loginURL, params, false, DEFAULT_HAC_TIMEOUT, settings);
+        final HttpResponse response = post(loginURL, params, false, DEFAULT_HAC_TIMEOUT, settings, replicaContext);
         if (response.getStatusLine().getStatusCode() == HttpStatus.SC_MOVED_TEMPORARILY) {
             final Header location = response.getFirstHeader("Location");
             if (location != null && location.getValue().contains("login_error")) {
@@ -141,7 +144,7 @@ public abstract class AbstractHybrisHacHttpClient {
         }
         final var newSessionId = CookieParser.getInstance().getSpecialCookie(response.getAllHeaders());
         if (newSessionId != null) {
-            Optional.ofNullable(cookiesPerSettings.get(settings))
+            Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
                 .ifPresent(cookies -> cookies.put(cookieName, newSessionId));
             return StringUtils.EMPTY;
         }
@@ -160,29 +163,30 @@ public abstract class AbstractHybrisHacHttpClient {
 
     @NotNull
     public final HttpResponse post(
-        @NotNull final Project project,
         @NotNull final String actionUrl,
         @NotNull final List<BasicNameValuePair> params,
         final boolean canReLoginIfNeeded,
         final long timeout,
-        final RemoteConnectionSettings settings
+        final RemoteConnectionSettings settings,
+        @Nullable final ReplicaContext replicaContext
     ) {
+        final var cookiesKey = Pair.pair(settings, replicaContext);
         final String cookieName = getCookieName(settings);
-        var cookies = cookiesPerSettings.get(settings);
+        var cookies = cookiesPerSettings.get(cookiesKey);
         if (cookies == null || !cookies.containsKey(cookieName)) {
-            final String errorMessage = login(project, settings);
+            final String errorMessage = login(settings, replicaContext, cookiesKey);
             if (StringUtils.isNotBlank(errorMessage)) {
                 return createErrorResponse(errorMessage);
             }
         }
-        cookies = cookiesPerSettings.get(settings);
+        cookies = cookiesPerSettings.get(cookiesKey);
         final var sessionId = cookies.get(cookieName);
-        final var csrfToken = getCsrfToken(settings.getGeneratedURL(), settings);
+        final var csrfToken = getCsrfToken(settings.getGeneratedURL(), settings, cookiesKey);
         if (csrfToken == null) {
-            cookiesPerSettings.remove(settings);
+            cookiesPerSettings.remove(cookiesKey);
 
             if (canReLoginIfNeeded) {
-                return post(project, actionUrl, params, false, timeout, settings);
+                return post(actionUrl, params, false, timeout, settings, replicaContext);
             }
             return createErrorResponse("Unable to obtain csrfToken for sessionId=" + sessionId);
         }
@@ -224,9 +228,9 @@ public abstract class AbstractHybrisHacHttpClient {
         };
 
         if (needsLogin) {
-            cookiesPerSettings.remove(settings);
+            cookiesPerSettings.remove(cookiesKey);
             if (canReLoginIfNeeded) {
-                return post(project, actionUrl, params, false, DEFAULT_HAC_TIMEOUT, settings);
+                return post(actionUrl, params, false, DEFAULT_HAC_TIMEOUT, settings, replicaContext);
             }
         }
         return response;
@@ -265,21 +269,21 @@ public abstract class AbstractHybrisHacHttpClient {
 
     protected void retrieveCookies(
         final String hacURL,
-        final @NotNull Project project,
-        final @NotNull RemoteConnectionSettings settings
+        final @NotNull RemoteConnectionSettings settings,
+        final @Nullable ReplicaContext replicaContext,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
     ) {
-        final var cookies = cookiesPerSettings.computeIfAbsent(settings, _settings -> new HashMap<>());
+        final var cookies = cookiesPerSettings.computeIfAbsent(cookiesKey, _settings -> new HashMap<>());
         cookies.clear();
 
-        final var res = getResponseForUrl(project, hacURL, settings);
+        final var res = getResponseForUrl(hacURL, settings, replicaContext);
 
         if (res == null) return;
 
         cookies.putAll(res.cookies());
 
-        final var replica = getReplica();
-        if (replica != null) {
-            cookies.put(replica.getCookieName(), replica.getId());
+        if (replicaContext != null) {
+            cookies.put(replicaContext.getCookieName(), replicaContext.getReplicaCookie());
         }
     }
 
@@ -290,17 +294,16 @@ public abstract class AbstractHybrisHacHttpClient {
 
     @Nullable
     protected Response getResponseForUrl(
-        final Project project,
         final String hacURL,
-        final @NotNull RemoteConnectionSettings settings
+        final @NotNull RemoteConnectionSettings settings,
+        final @Nullable ReplicaContext replicaContext
     ) {
         try {
             final var sslProtocol = settings.getSslProtocol();
             final var connection = connect(hacURL, sslProtocol);
-            final var replica = getReplica();
 
-            if (replica != null) {
-                connection.cookie(replica.getCookieName(), replica.getId());
+            if (replicaContext != null) {
+                connection.cookie(replicaContext.getCookieName(), replicaContext.getReplicaCookie());
             }
 
             return connection
@@ -316,17 +319,18 @@ public abstract class AbstractHybrisHacHttpClient {
 
     protected String getCsrfToken(
         final @NotNull String hacURL,
-        final @NotNull RemoteConnectionSettings settings
+        final @NotNull RemoteConnectionSettings settings,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
     ) {
         try {
             final var sslProtocol = settings.getSslProtocol();
 
             final Document doc = connect(hacURL, sslProtocol)
-                .cookies(cookiesPerSettings.get(settings))
+                .cookies(cookiesPerSettings.get(cookiesKey))
                 .get();
             final Elements csrfMetaElt = doc.select("meta[name=_csrf]");
             return csrfMetaElt.attr("content");
-        } catch (IOException | NoSuchAlgorithmException | KeyManagementException e) {
+        } catch (final IOException | NoSuchAlgorithmException | KeyManagementException e) {
             LOG.warn(e.getMessage(), e);
         }
         return null;

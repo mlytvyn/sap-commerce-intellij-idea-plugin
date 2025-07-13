@@ -108,7 +108,6 @@ public class HybrisHttpResult {
             return this;
         }
 
-
         public HybrisHttpResult build() {
             final HybrisHttpResult httpResult = new HybrisHttpResult();
             httpResult.hasError = this.hasError;
