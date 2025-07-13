@@ -21,6 +21,7 @@ package com.intellij.idea.plugin.hybris.tools.remote.http;
 
 import com.google.gson.Gson;
 import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings;
+import com.intellij.idea.plugin.hybris.tools.logging.LogLevel;
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType;
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionUtil;
 import com.intellij.idea.plugin.hybris.tools.remote.http.flexibleSearch.TableBuilder;
@@ -43,6 +44,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.io.Serial;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -60,19 +62,17 @@ import static org.jsoup.Jsoup.parse;
 public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
 
     private static final Logger LOG = Logger.getInstance(HybrisHacHttpClient.class);
+    @Serial
+    private static final long serialVersionUID = -6570347636518523678L;
 
     public static HybrisHacHttpClient getInstance(@NotNull final Project project) {
         return project.getService(HybrisHacHttpClient.class);
     }
 
-    public HybrisHacHttpClient(final Project project) {
-        super(project);
-    }
-
     @NotNull
     public HybrisHttpResult validateImpex(final Project project, final Map<String, String> requestParams) {
         final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final HttpResponse response = getHttpResponse(project, "/console/impex/import/validate", requestParams, settings);
+        final HttpResponse response = getImpExHttpResponse("/console/impex/import/validate", requestParams, settings);
         HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
         resultBuilder = resultBuilder.httpCode(response.getStatusLine().getStatusCode());
         if (response.getStatusLine().getStatusCode() != SC_OK) {
@@ -103,8 +103,7 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
         return resultBuilder.errorMessage("No data in response").build();
     }
 
-    private HttpResponse getHttpResponse(
-        final Project project,
+    private HttpResponse getImpExHttpResponse(
         final String urlSuffix,
         final Map<String, String> requestParams,
         final RemoteConnectionSettings settings
@@ -112,7 +111,7 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
     ) {
         final List<BasicNameValuePair> params = createParamsList(requestParams);
         final String actionUrl = settings.getGeneratedURL() + urlSuffix;
-        return post(project, actionUrl, params, false, DEFAULT_HAC_TIMEOUT, settings);
+        return post(actionUrl, params, false, DEFAULT_HAC_TIMEOUT, settings, null);
     }
 
     private List<BasicNameValuePair> createParamsList(final Map<String, String> requestParams) {
@@ -124,7 +123,7 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
     @NotNull
     public HybrisHttpResult importImpex(final Project project, final Map<String, String> requestParams) {
         final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final HttpResponse response = getHttpResponse(project, "/console/impex/import", requestParams, settings);
+        final HttpResponse response = getImpExHttpResponse("/console/impex/import", requestParams, settings);
         HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
         resultBuilder = resultBuilder.httpCode(response.getStatusLine().getStatusCode());
         if (response.getStatusLine().getStatusCode() != SC_OK) {
@@ -181,7 +180,7 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
         HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
         final String actionUrl = settings.getGeneratedURL() + "/console/flexsearch/execute";
 
-        final HttpResponse response = post(project, actionUrl, params, true, DEFAULT_HAC_TIMEOUT, settings);
+        final HttpResponse response = post(actionUrl, params, true, DEFAULT_HAC_TIMEOUT, settings, null);
         final StatusLine statusLine = response.getStatusLine();
         resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
         if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
@@ -223,11 +222,13 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
             .build();
     }
 
-    public @NotNull
-    HybrisHttpResult executeGroovyScript(
-        final Project project, final String content, final boolean isCommitMode, final int timeout
+    @NotNull
+    public HybrisHttpResult executeGroovyScript(
+        final Project project,
+        final String content,
+        @Nullable final ReplicaContext replicaContext,
+        final boolean isCommitMode, final int timeout
     ) {
-
         final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
         final var params = Arrays.asList(
             new BasicNameValuePair("scriptType", "groovy"),
@@ -237,7 +238,7 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
         HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
         final String actionUrl = settings.getGeneratedURL() + "/console/scripting/execute";
 
-        final HttpResponse response = post(project, actionUrl, params, true, timeout, settings);
+        final HttpResponse response = post(actionUrl, params, true, timeout, settings, replicaContext);
         final StatusLine statusLine = response.getStatusLine();
         resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
         if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
@@ -303,19 +304,18 @@ public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
     public HybrisHttpResult executeLogUpdate(
         final Project project,
         final String loggerName,
-        final String logLevel,
+        final LogLevel logLevel,
         final int timeout
     ) {
-
         final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
         final var params = Arrays.asList(
             new BasicNameValuePair("loggerName", loggerName),
-            new BasicNameValuePair("levelName", logLevel)
+            new BasicNameValuePair("levelName", logLevel.name())
         );
         HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
         final String actionUrl = settings.getGeneratedURL() + "/platform/log4j/changeLevel/";
 
-        final HttpResponse response = post(project, actionUrl, params, true, timeout, settings);
+        final HttpResponse response = post(actionUrl, params, true, timeout, settings, null);
         final StatusLine statusLine = response.getStatusLine();
         resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
         if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
