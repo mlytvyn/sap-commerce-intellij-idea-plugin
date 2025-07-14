@@ -83,17 +83,16 @@ data class FlexibleSearchQueryParameter(
             }
             ?: "''"
 
-        Byte::class, Short::class, Int::class, Long::class, Float::class, Double::class -> (rawValue?.asSafely<String>() ?: "")
-            .let { numberValue ->
-                if (operand == FlexibleSearchTypes.IN_EXPRESSION) numberValue
+        else -> rawValue?.asSafely<String>()
+            ?.let { plainValue ->
+                if (operand == FlexibleSearchTypes.IN_EXPRESSION) plainValue
                     .split("\n")
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .joinToString(",")
-                else numberValue
+                else plainValue
             }
-
-        else -> rawValue?.asSafely<String>() ?: ""
+            ?: ""
     }
 
     private fun evaluatePresentationValue(): String = when (type) {
@@ -101,13 +100,15 @@ data class FlexibleSearchQueryParameter(
 
         Date::class -> rawValue
             ?.asSafely<Date>()
-            ?.let { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(it) }
+            ?.let { SimpleDateFormat(DATE_FORMAT).format(it) }
             ?: ""
 
         else -> sqlValue
     }
 
     companion object {
+
+        const val DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS"
 
         fun of(bindParameter: FlexibleSearchBindParameter, currentParameters: Map<String, FlexibleSearchQueryParameter>) = FlexibleSearchQueryParameter(
             name = bindParameter.value,
