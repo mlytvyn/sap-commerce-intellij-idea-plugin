@@ -18,13 +18,11 @@
 
 package com.intellij.idea.plugin.hybris.settings
 
+import com.intellij.idea.plugin.hybris.tools.remote.execution.TransactionMode
+
 data class GroovySettings(
     var enableActionsToolbar: Boolean = true,
     var enableActionsToolbarForGroovyTest: Boolean = false,
     var enableActionsToolbarForGroovyIdeConsole: Boolean = false,
     var txMode: TransactionMode = TransactionMode.ROLLBACK,
 )
-
-enum class TransactionMode {
-    COMMIT, ROLLBACK
-}

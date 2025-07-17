@@ -17,20 +17,35 @@
  */
 package com.intellij.idea.plugin.hybris.impex.actions
 
-import com.intellij.idea.plugin.hybris.actions.AbstractExecuteAction
-import com.intellij.idea.plugin.hybris.common.HybrisConstants
+import com.intellij.idea.plugin.hybris.actions.ExecuteStatementAction
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
-import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.idea.plugin.hybris.tools.remote.console.impl.HybrisImpexConsole
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionClient
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionContext
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 
-class ImpExExecuteAction : AbstractExecuteAction(
+class ImpExExecuteAction : ExecuteStatementAction<HybrisImpexConsole>(
     ImpexLanguage,
-    HybrisConstants.CONSOLE_TITLE_IMPEX,
+    HybrisImpexConsole::class,
     message("hybris.impex.actions.execute_query"),
     message("hybris.impex.actions.execute_query.description"),
     HybrisIcons.Console.Actions.EXECUTE
 ) {
 
-    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+    override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
+        val console = openConsole(project, content) ?: return
+        val context = ImpExExecutionContext(
+            content = content
+        )
+
+        console.isEditable = false
+        project.service<ImpExExecutionClient>().execute(context) { coroutineScope, result ->
+            console.print(result)
+            console.isEditable = true
+        }
+    }
 }

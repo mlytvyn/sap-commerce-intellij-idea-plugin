@@ -18,10 +18,11 @@
 
 package com.intellij.idea.plugin.hybris.toolwindow
 
-import com.intellij.idea.plugin.hybris.tools.remote.http.HybrisHacHttpClient
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecutionClient
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.ReplicaContext
 import com.intellij.idea.plugin.hybris.tools.remote.http.RemoteConnectionContext
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.EditorNotificationPanel
@@ -52,6 +53,7 @@ class ManualReplicaSelectionDialog(
     private lateinit var manualReplicaId: JBTextField
 
     override fun createCenterPanel(): JComponent {
+        // TODO: support multiple replicas
         val firstReplica = replicas.firstOrNull()
         return panel {
             row {
@@ -71,7 +73,6 @@ class ManualReplicaSelectionDialog(
             row {
                 manualReplicaId = textField()
                     .label("Replica id:")
-                    // TODO: implement as a 0
                     .text(firstReplica?.replicaId ?: "")
                     .align(AlignX.FILL)
                     .component
@@ -94,6 +95,6 @@ class ManualReplicaSelectionDialog(
 
         val replicaContext = ReplicaContext(manualReplicaId.text, manualCookieName.text)
 
-        HybrisHacHttpClient.getInstance(project).connectionContext = RemoteConnectionContext.manual(listOf(replicaContext))
+        project.service<GroovyExecutionClient>().connectionContext = RemoteConnectionContext.manual(listOf(replicaContext))
     }
 }

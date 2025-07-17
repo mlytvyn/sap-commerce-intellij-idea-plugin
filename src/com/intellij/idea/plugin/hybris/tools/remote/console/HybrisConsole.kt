@@ -18,46 +18,140 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console
 
+import com.intellij.execution.console.ConsoleHistoryController
+import com.intellij.execution.console.ConsoleRootType
 import com.intellij.execution.console.LanguageConsoleImpl
+import com.intellij.execution.ui.ConsoleViewContentType.*
+import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionService
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
-import com.intellij.idea.plugin.hybris.tools.remote.http.impex.HybrisHttpResult
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionResult
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.ReplicaContext
 import com.intellij.lang.Language
+import com.intellij.openapi.application.edtWriteAction
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vcs.impl.LineStatusTrackerManager
+import com.intellij.ui.AnimatedIcon
 import com.intellij.util.ui.JBUI
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.io.Serial
 import javax.swing.Icon
 
-abstract class HybrisConsole(project: Project, title: String, language: Language) : LanguageConsoleImpl(project, title, language) {
+abstract class HybrisConsole<E : ExecutionContext>(
+    project: Project, title: String, language: Language,
+    private val coroutineScope: CoroutineScope
+) : LanguageConsoleImpl(project, title, language) {
 
     protected val borders10 = JBUI.Borders.empty(10)
     protected val borders5 = JBUI.Borders.empty(5, 10)
     protected val bordersLabel = JBUI.Borders.empty(10, 10, 10, 0)
 
+    private val consoleId: String = "hybris.console.$title"
+    private val consoleRootType = object : ConsoleRootType(consoleId, null) {}
+    private val consoleHistoryController = ConsoleHistoryController(consoleRootType, consoleId, this)
+
     init {
-        this.printDefaultText()
+        isEditable = true
+        printDefaultText()
+
+        consoleHistoryController.install()
     }
 
-    abstract fun execute(query: String, replicaContext: ReplicaContext? = null): HybrisHttpResult
+    val content: String
+        get() = currentEditor.document.text
+    val context
+        get() = currentExecutionContext(content)
 
+    internal abstract fun currentExecutionContext(content: String): E
     abstract fun title(): String
-
     abstract fun tip(): String
 
-    open fun icon(): Icon? = null
-
+    open fun icon(): Icon? = language.associatedFileType?.icon
+    open fun disabledIcon(): Icon? = AnimatedIcon.Default.INSTANCE
+    open fun onSelection() = Unit
+    open fun canExecute(): Boolean = isEditable
     open fun printDefaultText() = setInputText("")
 
-    open fun connectionType() = RemoteConnectionType.Hybris
-
-    open fun onSelection() {
-        //NOP
+    fun print(result: ExecutionResult) {
+        coroutineScope.launch {
+            edtWriteAction {
+                addCurrentQueryToHistory()
+                printResult(result)
+            }
+        }
     }
 
     override fun dispose() {
         LineStatusTrackerManager.getInstance(project).releaseTrackerFor(editorDocument, consoleEditor)
         super.dispose()
+    }
+
+    private fun addCurrentQueryToHistory() {
+        // Process input and add to history
+        val document = currentEditor.document
+        val textForHistory = document.text.trim()
+        val range = TextRange(0, document.textLength)
+
+        currentEditor.selectionModel.setSelection(range.startOffset, range.endOffset)
+        addToHistory(range, consoleEditor, false)
+        printDefaultText()
+
+        if (textForHistory.isNotBlank()) {
+            consoleHistoryController.addToHistory(textForHistory)
+        }
+    }
+
+    protected open fun printResult(result: ExecutionResult) {
+        printHost(result.remoteConnectionType, result.replicaContext)
+        printPlainText(result)
+    }
+
+    protected fun printHost(remoteConnectionType: RemoteConnectionType, replicaContext: ReplicaContext?) {
+        val activeConnectionSettings = project.service<RemoteConnectionService>().getActiveRemoteConnectionSettings(remoteConnectionType)
+        print("[HOST] ", SYSTEM_OUTPUT)
+        activeConnectionSettings.displayName
+            ?.let { name -> print("($name) ", LOG_INFO_OUTPUT) }
+        replicaContext
+            ?.replicaId
+            ?.let { print("($it) ", LOG_VERBOSE_OUTPUT) }
+
+        print("${activeConnectionSettings.generatedURL}\n", NORMAL_OUTPUT)
+    }
+
+    // TODO: why recreating the result?
+    private fun printPlainText(executionResult: ExecutionResult) {
+        val result = ExecutionResult.builder()
+            .remoteConnectionType(executionResult.remoteConnectionType)
+            .replicaContext(executionResult.replicaContext)
+            .errorMessage(executionResult.errorMessage)
+            .output(executionResult.output)
+            .result(executionResult.result)
+            .detailMessage(executionResult.detailMessage)
+            .build()
+        val detailMessage = result.detailMessage
+        val output = result.output
+        val res = result.result
+        val errorMessage = result.errorMessage
+
+        if (result.hasError()) {
+            print("[ERROR] \n", SYSTEM_OUTPUT)
+            print("$errorMessage\n$detailMessage\n", ERROR_OUTPUT)
+            return
+        }
+        if (!StringUtil.isEmptyOrSpaces(output)) {
+            print("[OUTPUT] \n", SYSTEM_OUTPUT)
+            print(output, NORMAL_OUTPUT)
+        }
+        if (!StringUtil.isEmptyOrSpaces(res)) {
+            print("[RESULT] \n", SYSTEM_OUTPUT)
+            print(res, NORMAL_OUTPUT)
+        }
+
+        print("\n", NORMAL_OUTPUT)
     }
 
     companion object {

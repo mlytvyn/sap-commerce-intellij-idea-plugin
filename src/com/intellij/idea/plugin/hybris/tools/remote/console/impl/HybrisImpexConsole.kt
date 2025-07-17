@@ -18,31 +18,33 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console.impl
 
-import com.intellij.execution.console.ConsoleHistoryController
-import com.intellij.execution.console.ConsoleRootType
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
-import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.http.HybrisHacHttpClient
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
-import com.intellij.idea.plugin.hybris.tools.remote.http.impex.HybrisHttpResult
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.Toggle
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ValidationMode
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.vcs.log.ui.frame.WrappedFlowLayout
+import kotlinx.coroutines.CoroutineScope
 import java.awt.BorderLayout
 import java.io.Serial
-import javax.swing.Icon
 import javax.swing.JPanel
 import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
 
-class HybrisImpexConsole(project: Project) : HybrisConsole(project, HybrisConstants.CONSOLE_TITLE_IMPEX, ImpexLanguage) {
-
-    private object MyConsoleRootType : ConsoleRootType("hybris.impex.shell", null)
+@Service(Service.Level.PROJECT)
+class HybrisImpexConsole(project: Project, coroutineScope: CoroutineScope) : HybrisConsole<ImpExExecutionContext>(
+    project,
+    HybrisConstants.CONSOLE_TITLE_IMPEX,
+    ImpexLanguage,
+    coroutineScope
+) {
 
     private val legacyModeCheckbox = JBCheckBox("Legacy mode")
         .also { it.border = borders10 }
@@ -52,16 +54,14 @@ class HybrisImpexConsole(project: Project) : HybrisConsole(project, HybrisConsta
         .also { it.border = borders10 }
     private val maxThreadsSpinner = JSpinner(SpinnerNumberModel(1, 1, 100, 1))
         .also { it.border = borders5 }
-    private val importModeComboBox = ComboBox(arrayOf("IMPORT_STRICT", "IMPORT_RELAXED"), 175)
+    private val importModeComboBox = ComboBox(ValidationMode.entries.toTypedArray(), 175)
         .also {
             it.border = borders5
-            it.selectedItem = "IMPORT_STRICT"
-            it.renderer = SimpleListCellRenderer.create("...") { value -> value }
+            it.selectedItem = ValidationMode.IMPORT_STRICT
+            it.renderer = SimpleListCellRenderer.create("...") { value -> value.name }
         }
 
     init {
-        isEditable = true
-
         val panel = JPanel(WrappedFlowLayout(0, 0))
         panel.add(JBLabel("UTF-8").also { it.border = borders10 })
         panel.add(JBLabel("Validation mode:").also { it.border = bordersLabel })
@@ -73,41 +73,20 @@ class HybrisImpexConsole(project: Project) : HybrisConsole(project, HybrisConsta
         panel.add(legacyModeCheckbox)
 
         add(panel, BorderLayout.NORTH)
-
-        ConsoleHistoryController(MyConsoleRootType, "hybris.impex.shell", this).install()
     }
+
+    override fun currentExecutionContext(content: String) = ImpExExecutionContext(
+        content = content,
+        validationMode = importModeComboBox.selectedItem as ValidationMode,
+        maxThreads = maxThreadsSpinner.value.toString().toInt(),
+        legacyMode = if (legacyModeCheckbox.isSelected) Toggle.ON else Toggle.OFF,
+        enableCodeExecution = if (enableCodeExecutionCheckbox.isSelected) Toggle.ON else Toggle.OFF,
+        sldEnabled = if (directPersistenceCheckbox.isSelected) Toggle.ON else Toggle.OFF,
+        distributedMode = Toggle.ON,
+    )
 
     override fun title(): String = HybrisConstants.IMPEX
     override fun tip(): String = "ImpEx Console"
-    override fun icon(): Icon = HybrisIcons.ImpEx.FILE
-
-    override fun execute(query: String, replicaContext: ReplicaContext?): HybrisHttpResult {
-        val requestParams = getRequestParams(query)
-        return HybrisHacHttpClient.getInstance(project).importImpex(project, requestParams)
-    }
-
-    fun validate(query: String): HybrisHttpResult {
-        val requestParams = getRequestParams(query)
-        return HybrisHacHttpClient.getInstance(project).validateImpex(project, requestParams)
-    }
-
-    private fun getRequestParams(query: String): MutableMap<String, String> {
-        val requestParams = mutableMapOf(
-            "scriptContent" to query,
-            "validationEnum" to importModeComboBox.selectedItem as String,
-            "encoding" to "UTF-8",
-            "maxThreads" to maxThreadsSpinner.value.toString(),
-            "_legacyMode" to "on", // Legacy Mode
-            "_enableCodeExecution" to "on",
-            "_distributedMode" to "on", // Distributed mode
-            "_sldEnabled" to "on", // Direct Persistence
-        )
-        if (legacyModeCheckbox.isSelected) requestParams["legacyMode"] = "true"
-        if (enableCodeExecutionCheckbox.isSelected) requestParams["enableCodeExecution"] = "true"
-        if (directPersistenceCheckbox.isSelected) requestParams["sldEnabled"] = "true"
-
-        return requestParams
-    }
 
     companion object {
         @Serial

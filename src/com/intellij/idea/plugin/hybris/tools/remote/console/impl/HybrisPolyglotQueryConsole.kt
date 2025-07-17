@@ -18,27 +18,31 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console.impl
 
-import com.intellij.execution.console.ConsoleHistoryController
-import com.intellij.execution.console.ConsoleRootType
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
-import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.polyglotQuery.PolyglotQueryLanguage
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.http.HybrisHacHttpClient
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.TransactionMode
+import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.QueryMode
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.vcs.log.ui.frame.WrappedFlowLayout
+import kotlinx.coroutines.CoroutineScope
 import java.awt.BorderLayout
 import java.io.Serial
 import javax.swing.JPanel
 import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
 
-class HybrisPolyglotQueryConsole(project: Project) : HybrisConsole(project, HybrisConstants.CONSOLE_TITLE_POLYGLOT_QUERY, PolyglotQueryLanguage) {
-
-    private object MyConsoleRootType : ConsoleRootType(ID, null)
+@Service(Service.Level.PROJECT)
+class HybrisPolyglotQueryConsole(project: Project, coroutineScope: CoroutineScope) : HybrisConsole<FlexibleSearchExecutionContext>(
+    project,
+    HybrisConstants.CONSOLE_TITLE_POLYGLOT_QUERY,
+    PolyglotQueryLanguage,
+    coroutineScope
+) {
 
     private val commitCheckbox = JBCheckBox("Commit mode")
         .also { it.border = borders10 }
@@ -57,25 +61,20 @@ class HybrisPolyglotQueryConsole(project: Project) : HybrisConsole(project, Hybr
         panel.add(maxRowsSpinner)
 
         add(panel, BorderLayout.NORTH)
-
-        ConsoleHistoryController(MyConsoleRootType, ID, this).install()
     }
 
-    override fun execute(query: String, replicaContext: ReplicaContext?) = HybrisHacHttpClient.getInstance(project).executeFlexibleSearch(
-        project,
-        commitCheckbox.isSelected,
-        false,
-        maxRowsSpinner.value.toString(),
-        query
+    override fun currentExecutionContext(content: String) = FlexibleSearchExecutionContext(
+        content = content,
+        maxCount = maxRowsSpinner.value.toString().toInt(),
+        transactionMode = if (commitCheckbox.isSelected) TransactionMode.COMMIT else TransactionMode.ROLLBACK,
+        queryMode = QueryMode.PolyglotQuery
     )
 
     override fun title() = "Polyglot Query"
     override fun tip() = "Polyglot Persistence Query Language Console (available only for 1905+)"
-    override fun icon() = HybrisIcons.PolyglotQuery.FILE
 
     companion object {
         @Serial
         private val serialVersionUID: Long = -1330953384857131472L
-        const val ID = "hybris.polyglot.query.shell"
     }
 }

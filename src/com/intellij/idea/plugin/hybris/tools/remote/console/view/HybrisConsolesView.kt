@@ -20,16 +20,13 @@ package com.intellij.idea.plugin.hybris.tools.remote.console.view
 
 import com.intellij.idea.plugin.hybris.actions.HybrisActionPlaces
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.HybrisClearAllAction
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.HybrisExecuteImmediatelyAction
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.HybrisImpexValidateAction
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.HybrisSuspendAction
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.handler.HybrisConsoleExecuteActionHandler
-import com.intellij.idea.plugin.hybris.tools.remote.console.actions.handler.HybrisConsoleExecuteValidateActionHandler
 import com.intellij.idea.plugin.hybris.tools.remote.console.impl.*
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionContext
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.*
-import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.ActionGroup
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
@@ -37,6 +34,8 @@ import java.awt.BorderLayout
 import java.io.Serial
 import javax.swing.JPanel
 import javax.swing.SwingConstants.TOP
+import kotlin.reflect.KClass
+import kotlin.reflect.cast
 
 class HybrisConsolesView(val project: Project) : SimpleToolWindowPanel(true), Disposable {
 
@@ -44,76 +43,53 @@ class HybrisConsolesView(val project: Project) : SimpleToolWindowPanel(true), Di
         //NOP
     }
 
-    private val impexConsole = HybrisImpexConsole(project)
-    private val groovyConsole = HybrisGroovyConsole(project)
-    private val monitorConsole = HybrisImpexMonitorConsole(project)
-    private val flexibleSearchConsole = HybrisFlexibleSearchConsole(project)
-    private val polyglotQueryConsole = HybrisPolyglotQueryConsole(project)
-    private val solrSearchConsole = HybrisSolrSearchConsole(project)
-
     private val actionToolbar: ActionToolbar
     private val hybrisTabs: HybrisConsoleTabs
 
     init {
         layout = BorderLayout()
 
-        val toolbarActions = DefaultActionGroup()
         val actionManager = ActionManager.getInstance()
+        val toolbarActions = actionManager.getAction("hybris.console.actionGroup") as ActionGroup
         actionToolbar = actionManager.createActionToolbar(HybrisActionPlaces.CONSOLE_TOOLBAR, toolbarActions, false)
 
         val panel = JPanel(BorderLayout())
 
-        val consoles = arrayOf(flexibleSearchConsole, impexConsole, groovyConsole, polyglotQueryConsole, monitorConsole, solrSearchConsole)
+        val consoles = arrayOf(
+            project.service<HybrisImpexConsole>(),
+            project.service<HybrisGroovyConsole>(),
+            project.service<HybrisFlexibleSearchConsole>(),
+            project.service<HybrisPolyglotQueryConsole>(),
+            project.service<HybrisSolrSearchConsole>(),
+            project.service<HybrisImpexMonitorConsole>(),
+            project.service<HybrisSQLConsole>()
+        )
         consoles.forEach { Disposer.register(this, it) }
+
         hybrisTabs = HybrisConsoleTabs(project, TOP, consoles, this)
+        actionToolbar.targetComponent = hybrisTabs.component
 
         panel.add(hybrisTabs.component, BorderLayout.CENTER)
-        actionToolbar.targetComponent = hybrisTabs.component
         panel.add(actionToolbar.component, BorderLayout.WEST)
 
-        val actionHandler = HybrisConsoleExecuteActionHandler(project, false)
-        val validateHandler = HybrisConsoleExecuteValidateActionHandler(project, false)
-        val executeAction = HybrisExecuteImmediatelyAction(actionHandler)
-        executeAction.registerCustomShortcutSet(CommonShortcuts.ALT_ENTER, this.component)
-
-        with(toolbarActions) {
-            add(ActionManager.getInstance().getAction("hybris.hac.chooseConnection"))
-            add(executeAction)
-            add(HybrisSuspendAction(actionHandler))
-            add(HybrisImpexValidateAction(validateHandler))
-        }
-
-        val actions = impexConsole.createConsoleActions()
-        actions[5] = HybrisClearAllAction()
-        toolbarActions.addAll(*actions)
         add(panel)
     }
 
-    fun setActiveConsole(console: HybrisConsole) {
+    fun setActiveConsole(console: HybrisConsole<out ExecutionContext>) {
         hybrisTabs.setActiveConsole(console)
     }
 
-    fun getActiveConsole(): HybrisConsole {
+    fun getActiveConsole(): HybrisConsole<out ExecutionContext> {
         return hybrisTabs.activeConsole()
     }
 
-    fun findConsole(consoleTitle: String): HybrisConsole? {
+    fun <C : HybrisConsole<out ExecutionContext>> findConsole(consoleClass: KClass<C>): C? {
         for (index in 0 until hybrisTabs.tabCount) {
-            val component = hybrisTabs.getComponentAt(index) as HybrisConsole
-            if (component.title == consoleTitle) {
-                return component
-            }
+            val c = hybrisTabs.getComponentAt(index)
+
+            if (consoleClass.isInstance(c)) return consoleClass.cast(c)
         }
         return null
-    }
-
-    fun validateImpex(e: AnActionEvent) = performAction(e, HybrisImpexValidateAction::class.java)
-
-    fun execute(e: AnActionEvent) = performAction(e, HybrisExecuteImmediatelyAction::class.java)
-
-    private fun performAction(e: AnActionEvent, clazz: Class<out AnAction>) {
-        val action = actionToolbar.actions.firstOrNull { clazz.isInstance(it) } ?: return
-        ActionUtil.performActionDumbAwareWithCallbacks(action, e)
     }
 
     companion object {

@@ -18,21 +18,23 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console.impl
 
-import com.intellij.execution.console.ConsoleHistoryController
-import com.intellij.execution.console.ConsoleRootType
+import com.intellij.execution.impl.ConsoleViewUtil
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
+import com.intellij.idea.plugin.hybris.impex.file.ImpexFileType
 import com.intellij.idea.plugin.hybris.settings.components.ProjectSettingsComponent
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.console.TimeOption
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
-import com.intellij.idea.plugin.hybris.tools.remote.http.monitorImpexFiles
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionResult
+import com.intellij.idea.plugin.hybris.tools.remote.execution.monitor.ImpExMonitorExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.monitor.TimeOption
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
+import kotlinx.coroutines.CoroutineScope
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
@@ -41,9 +43,13 @@ import java.io.Serial
 import java.util.concurrent.TimeUnit
 import javax.swing.JPanel
 
-class HybrisImpexMonitorConsole(project: Project) : HybrisConsole(project, HybrisConstants.CONSOLE_TITLE_IMPEX_MONITOR, ImpexLanguage) {
-
-    private object MyConsoleRootType : ConsoleRootType("hybris.impex.monitor.shell", null)
+@Service(Service.Level.PROJECT)
+class HybrisImpexMonitorConsole(project: Project, coroutineScope: CoroutineScope) : HybrisConsole<ImpExMonitorExecutionContext>(
+    project,
+    HybrisConstants.CONSOLE_TITLE_IMPEX_MONITOR,
+    ImpexLanguage,
+    coroutineScope
+) {
 
     private val timeComboBox = ComboBox(
         arrayOf(
@@ -55,6 +61,7 @@ class HybrisImpexMonitorConsole(project: Project) : HybrisConsole(project, Hybri
         )
     )
         .also { it.renderer = SimpleListCellRenderer.create("...") { cell -> cell.name } }
+
     private val workingDirLabel = JBLabel("Data folder: ${obtainDataFolder(project)}")
         .also { it.border = bordersLabel }
 
@@ -77,22 +84,27 @@ class HybrisImpexMonitorConsole(project: Project) : HybrisConsole(project, Hybri
         panel.add(workingDirLabel, constraints)
 
         add(panel, BorderLayout.NORTH)
-
-        ConsoleHistoryController(MyConsoleRootType, "hybris.impex.monitor.shell", this).install()
     }
+
+    override fun icon() = HybrisIcons.MONITORING
 
     private fun obtainDataFolder(project: Project): String {
         val settings = ProjectSettingsComponent.getInstance(project).state
         return FileUtil.toCanonicalPath("${project.basePath}${File.separatorChar}${settings.hybrisDirectory}${File.separatorChar}${HybrisConstants.HYBRIS_DATA_DIRECTORY}")
     }
 
-    private fun timeOption() = (timeComboBox.selectedItem as TimeOption)
-    private fun workingDir() = obtainDataFolder(project)
-    override fun execute(query: String, replicaContext: ReplicaContext?) = monitorImpexFiles(timeOption().value, timeOption().unit, workingDir())
+    override fun printResult(result: ExecutionResult) {
+        clear()
+        ConsoleViewUtil.printAsFileType(this, result.output, ImpexFileType)
+    }
+
+    override fun currentExecutionContext(content: String) = ImpExMonitorExecutionContext(
+        timeOption = timeComboBox.selectedItem as TimeOption,
+        workingDir = obtainDataFolder(project),
+    )
 
     override fun title() = "ImpEx Monitor"
     override fun tip() = "Last imported ImpEx files"
-    override fun icon() = HybrisIcons.MONITORING
 
     companion object {
         @Serial

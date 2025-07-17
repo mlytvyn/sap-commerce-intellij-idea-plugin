@@ -18,18 +18,17 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console.impl
 
-import com.intellij.execution.console.ConsoleHistoryController
-import com.intellij.execution.console.ConsoleRootType
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.http.AbstractHybrisHacHttpClient
+import com.intellij.idea.plugin.hybris.tools.remote.execution.TransactionMode
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecutionContext
 import com.intellij.idea.plugin.hybris.tools.remote.http.HybrisHacHttpClient
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.vcs.log.ui.frame.WrappedFlowLayout
-import icons.JetgroovyIcons
+import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.plugins.groovy.GroovyLanguage
 import java.awt.BorderLayout
 import java.io.Serial
@@ -37,13 +36,17 @@ import javax.swing.JPanel
 import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
 
-class HybrisGroovyConsole(project: Project) : HybrisConsole(project, HybrisConstants.CONSOLE_TITLE_GROOVY, GroovyLanguage) {
-
-    private object MyConsoleRootType : ConsoleRootType("hybris.groovy.shell", null)
+@Service(Service.Level.PROJECT)
+class HybrisGroovyConsole(project: Project, coroutineScope: CoroutineScope) : HybrisConsole<GroovyExecutionContext>(
+    project,
+    HybrisConstants.CONSOLE_TITLE_GROOVY,
+    GroovyLanguage,
+    coroutineScope
+) {
 
     private val commitCheckbox = JBCheckBox("Commit mode")
         .also { it.border = borders10 }
-    private val timeoutSpinner = JSpinner(SpinnerNumberModel(AbstractHybrisHacHttpClient.DEFAULT_HAC_TIMEOUT / 1000, 1, 3600, 10))
+    private val timeoutSpinner = JSpinner(SpinnerNumberModel(HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT / 1000, 1, 3600, 10))
         .also { it.border = borders5 }
 
     init {
@@ -55,22 +58,16 @@ class HybrisGroovyConsole(project: Project) : HybrisConsole(project, HybrisConst
         panel.add(timeoutSpinner)
 
         add(panel, BorderLayout.NORTH)
-
-        ConsoleHistoryController(MyConsoleRootType, "hybris.groovy.shell", this).install()
     }
 
-    override fun execute(query: String, replicaContext: ReplicaContext?) = HybrisHacHttpClient.getInstance(project).executeGroovyScript(
-        project, query, replicaContext,commitCheckbox.isSelected,
-        timeoutSpinner.value.toString().toInt() * 1000
+    override fun currentExecutionContext(content: String) = GroovyExecutionContext(
+        content,
+        if (commitCheckbox.isSelected) TransactionMode.COMMIT else TransactionMode.ROLLBACK,
+        timeoutSpinner.value.toString().toInt() * 1000,
     )
 
     override fun title() = "Groovy Scripting"
     override fun tip() = "Groovy Console"
-    override fun icon() = JetgroovyIcons.Groovy.Groovy_16x16
-
-    fun updateCommitMode(commitMode: Boolean) {
-        commitCheckbox.isSelected = commitMode
-    }
 
     companion object {
         @Serial

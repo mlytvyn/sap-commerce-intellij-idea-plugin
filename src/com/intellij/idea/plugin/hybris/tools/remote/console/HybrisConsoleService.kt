@@ -17,34 +17,25 @@
  */
 package com.intellij.idea.plugin.hybris.tools.remote.console
 
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionContext
 import com.intellij.idea.plugin.hybris.toolwindow.HybrisToolWindowService
-import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import kotlin.reflect.KClass
 
 @Service(Service.Level.PROJECT)
 class HybrisConsoleService(private val project: Project) {
 
-    fun findConsole(consoleTitle: String) = HybrisToolWindowService.getInstance(project).findConsolesView()
-        ?.findConsole(consoleTitle)
+    fun <C : HybrisConsole<out ExecutionContext>> findConsole(consoleClass: KClass<C>): C? = HybrisToolWindowService.getInstance(project).findConsolesView()
+        ?.findConsole(consoleClass)
 
-    fun setActiveConsole(console: HybrisConsole) {
+    fun setActiveConsole(console: HybrisConsole<out ExecutionContext>) {
         HybrisToolWindowService.getInstance(project).findConsolesView()
             ?.setActiveConsole(console)
     }
 
     fun getActiveConsole() = HybrisToolWindowService.getInstance(project).findConsolesView()
         ?.getActiveConsole()
-
-    fun validateImpex(e: AnActionEvent) {
-        HybrisToolWindowService.getInstance(project).findConsolesView()
-            ?.validateImpex(e)
-    }
-
-    fun executeStatement(e: AnActionEvent) {
-        HybrisToolWindowService.getInstance(project).findConsolesView()
-            ?.execute(e)
-    }
 
     companion object {
         fun getInstance(project: Project): HybrisConsoleService = project.getService(HybrisConsoleService::class.java)

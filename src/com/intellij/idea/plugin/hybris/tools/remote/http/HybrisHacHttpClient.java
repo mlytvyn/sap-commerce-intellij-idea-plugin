@@ -19,340 +19,327 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.http;
 
-import com.google.gson.Gson;
+import com.intellij.idea.plugin.hybris.common.HybrisConstants;
 import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings;
-import com.intellij.idea.plugin.hybris.tools.logging.LogLevel;
-import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType;
-import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionUtil;
-import com.intellij.idea.plugin.hybris.tools.remote.http.flexibleSearch.TableBuilder;
-import com.intellij.idea.plugin.hybris.tools.remote.http.impex.HybrisHttpResult;
-import com.intellij.idea.plugin.hybris.tools.remote.http.solr.SolrQueryObject;
-import com.intellij.idea.plugin.hybris.tools.remote.http.solr.impl.SolrHttpClient;
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.ReplicaContext;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import org.apache.commons.lang3.BooleanUtils;
+import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.UserDataHolderBase;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.Header;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
-import org.apache.http.StatusLine;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
+import org.apache.http.conn.HttpClientConnectionManager;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
+import org.apache.http.message.BasicHttpResponse;
 import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.message.BasicStatusLine;
+import org.apache.http.ssl.SSLContexts;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
+import org.jsoup.helper.ValidationException;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.Serial;
+import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.intellij.idea.plugin.hybris.tools.remote.http.impex.HybrisHttpResult.HybrisHttpResultBuilder.createResult;
-import static org.apache.commons.lang3.StringUtils.isNotEmpty;
-import static org.apache.http.HttpStatus.SC_BAD_REQUEST;
-import static org.apache.http.HttpStatus.SC_OK;
-import static org.jsoup.Jsoup.parse;
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static org.apache.http.HttpVersion.HTTP_1_1;
 
 @Service(Service.Level.PROJECT)
-public final class HybrisHacHttpClient extends AbstractHybrisHacHttpClient {
+public final class HybrisHacHttpClient extends UserDataHolderBase {
 
     private static final Logger LOG = Logger.getInstance(HybrisHacHttpClient.class);
-    @Serial
-    private static final long serialVersionUID = -6570347636518523678L;
+    public static final int DEFAULT_HAC_TIMEOUT = 6000;
 
     public static HybrisHacHttpClient getInstance(@NotNull final Project project) {
         return project.getService(HybrisHacHttpClient.class);
     }
 
-    @NotNull
-    public HybrisHttpResult validateImpex(final Project project, final Map<String, String> requestParams) {
-        final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final HttpResponse response = getImpExHttpResponse("/console/impex/import/validate", requestParams, settings);
-        HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
-        resultBuilder = resultBuilder.httpCode(response.getStatusLine().getStatusCode());
-        if (response.getStatusLine().getStatusCode() != SC_OK) {
-            return resultBuilder.errorMessage(response.getStatusLine().getReasonPhrase()).build();
-        }
-        final Document document;
-        try {
-            document = Jsoup.parse(response.getEntity().getContent(), StandardCharsets.UTF_8.name(), "");
-        } catch (IOException e) {
-            LOG.warn(e.getMessage(), e);
-            return resultBuilder.errorMessage(e.getMessage()).build();
-        }
-        final Element impexResultStatus = document.getElementById("validationResultMsg");
-        if (impexResultStatus == null) {
-            return resultBuilder.errorMessage("No data in response").build();
-        }
-        final boolean hasDataLevelAttr = impexResultStatus.hasAttr("data-level");
-        final boolean hasDataResultAttr = impexResultStatus.hasAttr("data-result");
-        if (hasDataLevelAttr && hasDataResultAttr) {
-            if ("error".equals(impexResultStatus.attr("data-level"))) {
-                final String dataResult = impexResultStatus.attr("data-result");
-                return resultBuilder.errorMessage(dataResult).build();
-            } else {
-                final String dataResult = impexResultStatus.attr("data-result");
-                return resultBuilder.output(dataResult).build();
-            }
-        }
-        return resultBuilder.errorMessage("No data in response").build();
-    }
+    @Serial
+    private static final long serialVersionUID = -4915832410081381025L;
 
-    private HttpResponse getImpExHttpResponse(
-        final String urlSuffix,
-        final Map<String, String> requestParams,
-        final RemoteConnectionSettings settings
+    private static final X509TrustManager X_509_TRUST_MANAGER = new X509TrustManager() {
 
-    ) {
-        final List<BasicNameValuePair> params = createParamsList(requestParams);
-        final String actionUrl = settings.getGeneratedURL() + urlSuffix;
-        return post(actionUrl, params, false, DEFAULT_HAC_TIMEOUT, settings, null);
-    }
-
-    private List<BasicNameValuePair> createParamsList(final Map<String, String> requestParams) {
-        return requestParams.entrySet().stream()
-            .map(entry -> new BasicNameValuePair(entry.getKey(), entry.getValue()))
-            .collect(Collectors.toList());
-    }
-
-    @NotNull
-    public HybrisHttpResult importImpex(final Project project, final Map<String, String> requestParams) {
-        final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final HttpResponse response = getImpExHttpResponse("/console/impex/import", requestParams, settings);
-        HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
-        resultBuilder = resultBuilder.httpCode(response.getStatusLine().getStatusCode());
-        if (response.getStatusLine().getStatusCode() != SC_OK) {
-            return resultBuilder.errorMessage(response.getStatusLine().getReasonPhrase()).build();
-        }
-        final Document document;
-        try {
-            document = Jsoup.parse(response.getEntity().getContent(), StandardCharsets.UTF_8.name(), "");
-        } catch (IOException e) {
-            LOG.warn(e.getMessage(), e);
-            return resultBuilder.errorMessage(e.getMessage()).build();
-        }
-        final Element impexResultStatus = document.getElementById("impexResult");
-        if (impexResultStatus == null) {
-            return resultBuilder.errorMessage("No data in response").build();
-        }
-        final boolean hasDataLevelAttr = impexResultStatus.hasAttr("data-level");
-        final boolean hasDataResultAttr = impexResultStatus.hasAttr("data-result");
-        if (hasDataLevelAttr && hasDataResultAttr) {
-            if ("error".equals(impexResultStatus.attr("data-level"))) {
-                final String dataResult = impexResultStatus.attr("data-result");
-                final Element detailMessage = document.getElementsByClass("impexResult").first().children().first();
-                return createResult()
-                    .errorMessage(dataResult)
-                    .detailMessage(detailMessage.text())
-                    .build();
-            } else {
-                final String dataResult = impexResultStatus.attr("data-result");
-                return createResult().output(dataResult).build();
-            }
-        }
-        return resultBuilder.errorMessage("No data in response").build();
-    }
-
-    @NotNull
-    public HybrisHttpResult executeFlexibleSearch(
-        final Project project,
-        final boolean shouldCommit,
-        final boolean isPlainSQL,
-        final String maxRows,
-        final String content
-    ) {
-        final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final var params = Arrays.asList(
-            new BasicNameValuePair("scriptType", "flexibleSearch"),
-            new BasicNameValuePair("commit", BooleanUtils.toStringTrueFalse(shouldCommit)),
-            new BasicNameValuePair("flexibleSearchQuery", isPlainSQL ? "" : content),
-            new BasicNameValuePair("sqlQuery", isPlainSQL ? content : ""),
-            new BasicNameValuePair("maxCount", maxRows),
-            new BasicNameValuePair("user", settings.getUsername())
-//            new BasicNameValuePair("dataSource", "master"),
-//            new BasicNameValuePair("locale", "en")
-        );
-        HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
-        final String actionUrl = settings.getGeneratedURL() + "/console/flexsearch/execute";
-
-        final HttpResponse response = post(actionUrl, params, true, DEFAULT_HAC_TIMEOUT, settings, null);
-        final StatusLine statusLine = response.getStatusLine();
-        resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
-        if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
-            return resultBuilder.errorMessage("[" + statusLine.getStatusCode() + "] " +
-                statusLine.getReasonPhrase()).build();
+        @Override
+        @Nullable
+        public X509Certificate[] getAcceptedIssuers() {
+            return null;
         }
 
-        final Map json;
-        try {
-            final var inputStream = response.getEntity().getContent();
-            final var responseContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            json = new Gson().fromJson(responseContent, HashMap.class);
-        } catch (final Exception e) {
-            return resultBuilder.errorMessage(e.getMessage() + ' ' + actionUrl).httpCode(SC_BAD_REQUEST).build();
+        @Override
+        public void checkClientTrusted(final X509Certificate[] chain, final String authType) {
         }
 
-        if (json == null) {
-            return createResult()
-                .errorMessage("Cannot parse response from the server...")
-                .build();
+        @Override
+        public void checkServerTrusted(final X509Certificate[] chain, final String authType) {
         }
+    };
 
-        if (json.get("exception") != null) {
-            return createResult()
-                .errorMessage(((Map<String, Object>) json.get("exception")).get("message").toString())
-                .build();
-        }
+    private final Map<Pair<RemoteConnectionSettings, ReplicaContext>, Map<String, String>> cookiesPerSettings = new WeakHashMap<>();
 
-        final TableBuilder tableBuilder = new TableBuilder();
-
-        final List<String> headers = (List<String>) json.get("headers");
-        final List<List<String>> resultList = (List<List<String>>) json.get("resultList");
-
-        tableBuilder.addHeaders(headers);
-        resultList.forEach(tableBuilder::addRow);
-
-        return resultBuilder
-            .output(tableBuilder.toString())
-            .build();
-    }
-
-    @NotNull
-    public HybrisHttpResult executeGroovyScript(
-        final Project project,
-        final String content,
+    public String login(
+        @NotNull final RemoteConnectionSettings settings,
         @Nullable final ReplicaContext replicaContext,
-        final boolean isCommitMode, final int timeout
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
     ) {
-        final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final var params = Arrays.asList(
-            new BasicNameValuePair("scriptType", "groovy"),
-            new BasicNameValuePair("commit", String.valueOf(isCommitMode)),
-            new BasicNameValuePair("script", content)
+        final var hostHacURL = settings.getGeneratedURL();
+
+        retrieveCookies(hostHacURL, settings, replicaContext, cookiesKey);
+
+        final var cookieName = getCookieName(settings);
+        final var sessionId = Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
+            .map(it -> it.get(cookieName))
+            .orElse(null);
+        if (sessionId == null) {
+            return "Unable to obtain sessionId for " + hostHacURL;
+        }
+        final var csrfToken = getCsrfToken(hostHacURL, settings, cookiesKey);
+        final var params = List.of(
+            new BasicNameValuePair("j_username", settings.getUsername()),
+            new BasicNameValuePair("j_password", settings.getPassword()),
+            new BasicNameValuePair("_csrf", csrfToken)
         );
-        HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
-        final String actionUrl = settings.getGeneratedURL() + "/console/scripting/execute";
-
-        final HttpResponse response = post(actionUrl, params, true, timeout, settings, replicaContext);
-        final StatusLine statusLine = response.getStatusLine();
-        resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
-        if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
-            return resultBuilder.errorMessage("[" + statusLine.getStatusCode() + "] " +
-                statusLine.getReasonPhrase()).build();
+        final var loginURL = hostHacURL + "/j_spring_security_check";
+        final HttpResponse response = post(loginURL, params, false, HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT, settings, replicaContext);
+        if (response.getStatusLine().getStatusCode() == HttpStatus.SC_MOVED_TEMPORARILY) {
+            final Header location = response.getFirstHeader("Location");
+            if (location != null && location.getValue().contains("login_error")) {
+                return "Wrong username/password. Set your credentials in [y] tool window.";
+            }
         }
-        final Document document;
-        try {
-            document = parse(response.getEntity().getContent(), StandardCharsets.UTF_8.name(), "");
-        } catch (final IOException e) {
-            return resultBuilder.errorMessage(e.getMessage() + ' ' + actionUrl).httpCode(SC_BAD_REQUEST).build();
+        final var newSessionId = CookieParser.getInstance().getSpecialCookie(response.getAllHeaders());
+        if (newSessionId != null) {
+            Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
+                .ifPresent(cookies -> cookies.put(cookieName, newSessionId));
+            return StringUtils.EMPTY;
         }
-        final Elements fsResultStatus = document.getElementsByTag("body");
-        if (fsResultStatus == null) {
-            return resultBuilder.errorMessage("No data in response").build();
+        final int statusCode = response.getStatusLine().getStatusCode();
+        final StringBuilder sb = new StringBuilder();
+        sb.append("HTTP ");
+        sb.append(statusCode);
+        sb.append(' ');
+        switch (statusCode) {
+            case HTTP_OK -> sb.append("Unable to obtain sessionId from response");
+            case HTTP_MOVED_TEMP -> sb.append(response.getFirstHeader("Location"));
+            default -> sb.append(response.getStatusLine().getReasonPhrase());
         }
-        final Map json = parseResponse(fsResultStatus);
-
-        if (json == null) {
-            return createResult()
-                .errorMessage("Cannot parse response from the server...")
-                .build();
-        }
-
-        if (json.get("stacktraceText") != null && isNotEmpty(json.get("stacktraceText").toString())) {
-            return createResult()
-                .errorMessage(json.get("stacktraceText").toString())
-                .build();
-        }
-
-        if (json.get("outputText") != null) {
-            resultBuilder.output(json.get("outputText").toString());
-        }
-        if (json.get("executionResult") != null) {
-            resultBuilder.result(json.get("executionResult").toString());
-        }
-        return resultBuilder.build();
+        return sb.toString();
     }
 
     @NotNull
-    public HybrisHttpResult executeSolrSearch(final Project project, @Nullable final SolrQueryObject queryObject) {
-        if (queryObject != null) {
-            return SolrHttpClient.getInstance(project).executeSolrQuery(project, queryObject);
+    public HttpResponse post(
+        @NotNull final String actionUrl,
+        @NotNull final List<BasicNameValuePair> params,
+        final boolean canReLoginIfNeeded,
+        final int timeout,
+        final RemoteConnectionSettings settings,
+        @Nullable final ReplicaContext replicaContext
+    ) {
+        final var cookiesKey = Pair.pair(settings, replicaContext);
+        final String cookieName = getCookieName(settings);
+        var cookies = cookiesPerSettings.get(cookiesKey);
+        if (cookies == null || !cookies.containsKey(cookieName)) {
+            final String errorMessage = login(settings, replicaContext, cookiesKey);
+            if (StringUtils.isNotBlank(errorMessage)) {
+                return createErrorResponse(errorMessage);
+            }
+        }
+        cookies = cookiesPerSettings.get(cookiesKey);
+        final var sessionId = cookies.get(cookieName);
+        final var csrfToken = getCsrfToken(settings.getGeneratedURL(), settings, cookiesKey);
+        if (csrfToken == null) {
+            cookiesPerSettings.remove(cookiesKey);
+
+            if (canReLoginIfNeeded) {
+                return post(actionUrl, params, false, timeout, settings, replicaContext);
+            }
+            return createErrorResponse("Unable to obtain csrfToken for sessionId=" + sessionId);
+        }
+        final var client = createAllowAllClient(timeout);
+        if (client == null) {
+            return createErrorResponse("Unable to create HttpClient");
+        }
+        final var post = new HttpPost(actionUrl);
+        final var cookie = cookies.entrySet().stream()
+            .map(it -> it.getKey() + '=' + it.getValue())
+            .collect(Collectors.joining("; "));
+        post.setHeader("User-Agent", HttpHeaders.USER_AGENT);
+        post.setHeader("X-CSRF-TOKEN", csrfToken);
+        post.setHeader("Cookie", cookie);
+        post.setHeader("Accept", "application/json");
+        post.setHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        post.setHeader("Sec-Fetch-Dest", "empty");
+        post.setHeader("Sec-Fetch-Mode", "cors");
+        post.setHeader("Sec-Fetch-Site", "same-origin");
+
+        final HttpResponse response;
+        try {
+            post.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
+            response = client.execute(post);
+        } catch (IOException e) {
+            LOG.warn(e.getMessage(), e);
+            return createErrorResponse(e.getMessage());
         }
 
-        return HybrisHttpResult.HybrisHttpResultBuilder
-            .createResult()
-            .httpCode(HttpStatus.SC_BAD_GATEWAY)
-            .errorMessage("Unable to connect to Solr server. Please, check connection configuration")
+        final var statusCode = response.getStatusLine().getStatusCode();
+        final var needsLogin = switch (statusCode) {
+            case HttpStatus.SC_FORBIDDEN,
+                 HttpStatus.SC_METHOD_NOT_ALLOWED -> true;
+            case HttpStatus.SC_MOVED_TEMPORARILY -> {
+                final var location = response.getFirstHeader("Location");
+                yield location != null && location.getValue().contains("login");
+            }
+            default -> false;
+        };
+
+        if (needsLogin) {
+            cookiesPerSettings.remove(cookiesKey);
+            if (canReLoginIfNeeded) {
+                return post(actionUrl, params, false, HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT, settings, replicaContext);
+            }
+        }
+        return response;
+    }
+
+    private HttpResponse createErrorResponse(final String reasonPhrase) {
+        return new BasicHttpResponse(new BasicStatusLine(HTTP_1_1, HttpStatus.SC_SERVICE_UNAVAILABLE, reasonPhrase));
+    }
+
+    private CloseableHttpClient createAllowAllClient(final int timeout) {
+        final SSLContext sslcontext;
+        try {
+            sslcontext = SSLContexts.custom().loadTrustMaterial(null, (chain, authType) -> true).build();
+        } catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
+            LOG.warn(e.getMessage(), e);
+            return null;
+        }
+        final SSLConnectionSocketFactory sslConnectionFactory = new SSLConnectionSocketFactory(sslcontext, NoopHostnameVerifier.INSTANCE);
+
+        final Registry<ConnectionSocketFactory> registry = RegistryBuilder.<ConnectionSocketFactory>create()
+            .register("http", PlainConnectionSocketFactory.getSocketFactory())
+            .register("https", sslConnectionFactory)
+            .build();
+
+        final HttpClientConnectionManager ccm = new BasicHttpClientConnectionManager(registry);
+        final RequestConfig config = RequestConfig.custom()
+            .setSocketTimeout(timeout)
+            .setConnectTimeout(timeout)
+            .build();
+        return HttpClients.custom()
+            .setConnectionManager(ccm)
+            .setDefaultRequestConfig(config)
             .build();
     }
 
-    private static @Nullable Map parseResponse(final Elements fsResultStatus) {
+
+    private void retrieveCookies(
+        final String hacURL,
+        final @NotNull RemoteConnectionSettings settings,
+        final @Nullable ReplicaContext replicaContext,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
+    ) {
+        final var cookies = cookiesPerSettings.computeIfAbsent(cookiesKey, _settings -> new HashMap<>());
+        cookies.clear();
+
+        final var res = getResponseForUrl(hacURL, settings, replicaContext);
+
+        if (res == null) return;
+
+        cookies.putAll(res.cookies());
+
+        if (replicaContext != null) {
+            cookies.put(replicaContext.getCookieName(), replicaContext.getReplicaCookie());
+        }
+    }
+
+    private String getCookieName(@NotNull final RemoteConnectionSettings settings) {
+        final var sessionCookieName = settings.getSessionCookieName();
+        return StringUtils.isNotBlank(sessionCookieName) ? sessionCookieName : HybrisConstants.DEFAULT_SESSION_COOKIE_NAME;
+    }
+
+    @Nullable
+    private Connection.Response getResponseForUrl(
+        final String hacURL,
+        final @NotNull RemoteConnectionSettings settings,
+        final @Nullable ReplicaContext replicaContext
+    ) {
         try {
-            return new Gson().fromJson(fsResultStatus.text(), HashMap.class);
-        } catch (final Exception e) {
-            LOG.error("Cannot parse response", e);
+            final var sslProtocol = settings.getSslProtocol();
+            final var connection = connect(hacURL, sslProtocol);
+
+            if (replicaContext != null) {
+                connection.cookie(replicaContext.getCookieName(), replicaContext.getReplicaCookie());
+            }
+
+            return connection
+                .method(Connection.Method.GET)
+                .execute();
+        } catch (final ConnectException ce) {
+            return null;
+        } catch (final NoSuchAlgorithmException | IOException | KeyManagementException | ValidationException e) {
+            LOG.warn(e.getMessage(), e);
             return null;
         }
     }
 
-    @NotNull
-    public HybrisHttpResult executeLogUpdate(
-        final Project project,
-        final String loggerName,
-        final LogLevel logLevel,
-        final int timeout
+    private String getCsrfToken(
+        final @NotNull String hacURL,
+        final @NotNull RemoteConnectionSettings settings,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
     ) {
-        final var settings = RemoteConnectionUtil.INSTANCE.getActiveRemoteConnectionSettings(project, RemoteConnectionType.Hybris);
-        final var params = Arrays.asList(
-            new BasicNameValuePair("loggerName", loggerName),
-            new BasicNameValuePair("levelName", logLevel.name())
-        );
-        HybrisHttpResult.HybrisHttpResultBuilder resultBuilder = createResult();
-        final String actionUrl = settings.getGeneratedURL() + "/platform/log4j/changeLevel/";
-
-        final HttpResponse response = post(actionUrl, params, true, timeout, settings, null);
-        final StatusLine statusLine = response.getStatusLine();
-        resultBuilder = resultBuilder.httpCode(statusLine.getStatusCode());
-        if (statusLine.getStatusCode() != SC_OK || response.getEntity() == null) {
-            return resultBuilder.errorMessage("[" + statusLine.getStatusCode() + "] " +
-                statusLine.getReasonPhrase()).build();
-        }
-        final Document document;
         try {
-            document = parse(response.getEntity().getContent(), StandardCharsets.UTF_8.name(), "");
-        } catch (final IOException e) {
-            return resultBuilder.errorMessage(e.getMessage() + ' ' + actionUrl).httpCode(SC_BAD_REQUEST).build();
-        }
-        final Elements fsResultStatus = document.getElementsByTag("body");
-        if (fsResultStatus == null) {
-            return resultBuilder.errorMessage("No data in response").build();
-        }
-        final Map json = parseResponse(fsResultStatus);
+            final var sslProtocol = settings.getSslProtocol();
 
-        if (json == null) {
-            return createResult()
-                .errorMessage("Cannot parse response from the server...")
-                .build();
+            final Document doc = connect(hacURL, sslProtocol)
+                .cookies(cookiesPerSettings.get(cookiesKey))
+                .get();
+            final Elements csrfMetaElt = doc.select("meta[name=_csrf]");
+            return csrfMetaElt.attr("content");
+        } catch (final IOException | NoSuchAlgorithmException | KeyManagementException e) {
+            LOG.warn(e.getMessage(), e);
         }
+        return null;
+    }
 
-        final var stacktraceText = json.get("stacktraceText");
-        if (stacktraceText != null && isNotEmpty(stacktraceText.toString())) {
-            return createResult()
-                .errorMessage(stacktraceText.toString())
-                .build();
-        }
+    private Connection connect(@NotNull final String url, final String sslProtocol) throws NoSuchAlgorithmException, KeyManagementException {
+        final TrustManager[] trustAllCerts = new TrustManager[]{X_509_TRUST_MANAGER};
 
-        if (json.get("outputText") != null) {
-            resultBuilder.output(json.get("outputText").toString());
-        }
-        if (json.get("executionResult") != null) {
-            resultBuilder.result(json.get("executionResult").toString());
-        }
-        return resultBuilder.build();
+        final SSLContext sc = SSLContext.getInstance(sslProtocol);
+        sc.init(null, trustAllCerts, new SecureRandom());
+        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+        HttpsURLConnection.setDefaultHostnameVerifier(new NoopHostnameVerifier());
+        return Jsoup.connect(url);
     }
 }
