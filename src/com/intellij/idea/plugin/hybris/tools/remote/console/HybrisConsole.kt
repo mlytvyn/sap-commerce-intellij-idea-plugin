@@ -32,7 +32,6 @@ import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
-import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vcs.impl.LineStatusTrackerManager
 import com.intellij.ui.AnimatedIcon
 import com.intellij.util.ui.JBUI
@@ -76,21 +75,34 @@ abstract class HybrisConsole<E : ExecutionContext>(
     open fun canExecute(): Boolean = isEditable
     open fun printDefaultText() = setInputText("")
 
-    fun print(result: ExecutionResult) {
-        coroutineScope.launch {
-            edtWriteAction {
-                addCurrentQueryToHistory()
-                printResult(result)
-            }
-        }
-    }
-
     override fun dispose() {
         LineStatusTrackerManager.getInstance(project).releaseTrackerFor(editorDocument, consoleEditor)
         super.dispose()
     }
 
-    private fun addCurrentQueryToHistory() {
+    fun beforeExecution() {
+        coroutineScope.launch {
+            edtWriteAction {
+                isEditable = false
+                addQueryToHistory()
+            }
+        }
+    }
+
+    fun afterExecution() {
+        isEditable = true
+    }
+
+    fun print(result: ExecutionResult, isEditable: Boolean = true) {
+        coroutineScope.launch {
+            edtWriteAction {
+                printResult(result)
+                this@HybrisConsole.isEditable = isEditable
+            }
+        }
+    }
+
+    fun addQueryToHistory() {
         // Process input and add to history
         val document = currentEditor.document
         val textForHistory = document.text.trim()
@@ -122,34 +134,24 @@ abstract class HybrisConsole<E : ExecutionContext>(
         print("${activeConnectionSettings.generatedURL}\n", NORMAL_OUTPUT)
     }
 
-    // TODO: why recreating the result?
-    private fun printPlainText(executionResult: ExecutionResult) {
-        val result = ExecutionResult.builder()
-            .remoteConnectionType(executionResult.remoteConnectionType)
-            .replicaContext(executionResult.replicaContext)
-            .errorMessage(executionResult.errorMessage)
-            .output(executionResult.output)
-            .result(executionResult.result)
-            .detailMessage(executionResult.detailMessage)
-            .build()
-        val detailMessage = result.detailMessage
-        val output = result.output
-        val res = result.result
-        val errorMessage = result.errorMessage
-
+    private fun printPlainText(result: ExecutionResult) {
         if (result.hasError()) {
             print("[ERROR] \n", SYSTEM_OUTPUT)
-            print("$errorMessage\n$detailMessage\n", ERROR_OUTPUT)
+            print("${result.errorMessage}\n", ERROR_OUTPUT)
+            print("${result.detailMessage}\n", ERROR_OUTPUT)
             return
         }
-        if (!StringUtil.isEmptyOrSpaces(output)) {
-            print("[OUTPUT] \n", SYSTEM_OUTPUT)
-            print(output, NORMAL_OUTPUT)
-        }
-        if (!StringUtil.isEmptyOrSpaces(res)) {
-            print("[RESULT] \n", SYSTEM_OUTPUT)
-            print(res, NORMAL_OUTPUT)
-        }
+
+        result.output.takeIf { it.isNotBlank() }
+            ?.let {
+                print("[OUTPUT] \n", SYSTEM_OUTPUT)
+                print(it, NORMAL_OUTPUT)
+            }
+        result.result.takeIf { it.isNotBlank() }
+            ?.let {
+                print("[RESULT] \n", SYSTEM_OUTPUT)
+                print(it, NORMAL_OUTPUT)
+            }
 
         print("\n", NORMAL_OUTPUT)
     }
