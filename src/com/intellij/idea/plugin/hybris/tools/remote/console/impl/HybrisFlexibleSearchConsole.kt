@@ -18,63 +18,54 @@
 
 package com.intellij.idea.plugin.hybris.tools.remote.console.impl
 
-import com.intellij.execution.console.ConsoleHistoryController
-import com.intellij.execution.console.ConsoleRootType
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
-import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.flexibleSearch.FlexibleSearchLanguage
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
-import com.intellij.idea.plugin.hybris.tools.remote.http.HybrisHacHttpClient
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.TransactionMode
+import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.QueryMode
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
-import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.vcs.log.ui.frame.WrappedFlowLayout
+import kotlinx.coroutines.CoroutineScope
 import java.awt.BorderLayout
 import java.io.Serial
-import javax.swing.Icon
 import javax.swing.JPanel
 import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
 
-class HybrisFlexibleSearchConsole(project: Project) : HybrisConsole(project, HybrisConstants.CONSOLE_TITLE_FLEXIBLE_SEARCH, FlexibleSearchLanguage) {
-
-    object MyConsoleRootType : ConsoleRootType("hybris.flexible.search.shell", null)
+@Service(Service.Level.PROJECT)
+class HybrisFlexibleSearchConsole(project: Project, coroutineScope: CoroutineScope) : HybrisConsole<FlexibleSearchExecutionContext>(
+    project,
+    HybrisConstants.CONSOLE_TITLE_FLEXIBLE_SEARCH,
+    FlexibleSearchLanguage,
+    coroutineScope
+) {
 
     private val panel = JPanel(WrappedFlowLayout(0, 0))
 
-    private val commitCheckbox = JBCheckBox("Commit mode")
-        .also { it.border = borders10 }
-    private val plainSqlCheckbox = JBCheckBox("Plain SQL")
-        .also { it.border = borders10 }
     private val maxRowsSpinner = JSpinner(SpinnerNumberModel(200, 1, Integer.MAX_VALUE, 1))
         .also { it.border = borders5 }
 
     init {
         isEditable = true
 
-        panel.add(commitCheckbox)
-        panel.add(plainSqlCheckbox)
         panel.add(JBLabel("Rows:").also { it.border = bordersLabel })
         panel.add(maxRowsSpinner)
 
         add(panel, BorderLayout.NORTH)
-
-        ConsoleHistoryController(MyConsoleRootType, "hybris.flexible.search.shell", this).install()
     }
 
-    override fun execute(query: String, replicaContext: ReplicaContext?) = HybrisHacHttpClient.getInstance(project)
-        .executeFlexibleSearch(
-            project,
-            commitCheckbox.isSelected,
-            plainSqlCheckbox.isSelected,
-            maxRowsSpinner.value.toString(),
-            query
-        )
+    override fun currentExecutionContext(content: String) = FlexibleSearchExecutionContext(
+        content = content,
+        maxCount = maxRowsSpinner.value.toString().toInt(),
+        transactionMode = TransactionMode.ROLLBACK,
+        queryMode = QueryMode.FlexibleSearch
+    )
 
     override fun title(): String = "FlexibleSearch"
     override fun tip(): String = "FlexibleSearch Console"
-    override fun icon(): Icon = HybrisIcons.FlexibleSearch.FILE
 
     companion object {
         @Serial

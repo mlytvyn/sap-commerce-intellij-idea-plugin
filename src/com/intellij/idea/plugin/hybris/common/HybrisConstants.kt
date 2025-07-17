@@ -27,7 +27,6 @@ import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
 import com.intellij.idea.plugin.hybris.polyglotQuery.psi.PolyglotQueryTypes
 import com.intellij.idea.plugin.hybris.project.descriptors.HybrisProjectDescriptor
 import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptor
-import com.intellij.idea.plugin.hybris.tools.remote.http.ReplicaContext
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.io.FileUtilRt
@@ -84,6 +83,7 @@ object HybrisConstants {
     const val CONSOLE_TITLE_IMPEX_MONITOR = "[y] Monitor Console"
     const val CONSOLE_TITLE_GROOVY = "[y] Groovy Console"
     const val CONSOLE_TITLE_FLEXIBLE_SEARCH = "[y] FxS Console"
+    const val CONSOLE_TITLE_SQL = "[y] SQL Console"
     const val CONSOLE_TITLE_SOLR_SEARCH = "[y] Solr search"
     const val CONSOLE_TITLE_POLYGLOT_QUERY = "[y] PolyglotQuery"
 
@@ -731,7 +731,6 @@ object HybrisConstants {
     val KEY_REMOTE_EXECUTION_CONTENT = Key.create<String>("hybris.http.remote.execution.content")
 
     val DATA_KEY_LOGGER_IDENTIFIER = DataKey.create<String>("sap.cx.logger.identifier")
-    val DATA_KEY_REPLICA_CONTEXT = DataKey.create<ReplicaContext>("sap.cx.http.remote.connection.replica.context")
 
     const val FXS_DUMMY_IDENTIFIER = CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED
     val FXS_SUPPORTED_ELEMENT_TYPES = setOf(
