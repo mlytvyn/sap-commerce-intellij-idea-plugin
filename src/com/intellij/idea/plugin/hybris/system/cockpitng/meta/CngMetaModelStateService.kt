@@ -19,6 +19,7 @@
 package com.intellij.idea.plugin.hybris.system.cockpitng.meta
 
 import com.intellij.idea.plugin.hybris.system.cockpitng.meta.model.CngMeta
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
@@ -30,16 +31,21 @@ import kotlinx.coroutines.CoroutineScope
 @Service(Service.Level.PROJECT)
 class CngMetaModelStateService(project: Project, coroutineScope: CoroutineScope) : MetaModelStateService<CngGlobalMetaModel, CngMeta<DomElement>, DomElement>(
     project, coroutineScope, "Cockpit NG",
-    project.service<CngMetaCollector>(),
-    project.service<CngMetaModelAggregatedProcessor>()
+    CngMetaCollector.getInstance(project),
+    CngMetaModelAggregatedProcessor.getInstance(project)
 ) {
 
     override fun onCompletion(newState: CngGlobalMetaModel) {
-        project.messageBus.syncPublisher(TOPIC).cngSystemChanged(newState)
+        project.messageBus.syncPublisher(MetaModelChangeListener.TOPIC).cngSystemChanged(newState)
     }
 
     override suspend fun create(metaModelsToMerge: Collection<CngMeta<DomElement>>): CngGlobalMetaModel = CngGlobalMetaModel().also {
         readAction { CngMetaModelMerger.merge(it, metaModelsToMerge.sortedBy { meta -> !meta.custom }) }
+    }
+
+    companion object {
+        fun state(project: Project) = getInstance(project).get()
+        fun getInstance(project: Project): CngMetaModelStateService = project.service()
     }
 
 }

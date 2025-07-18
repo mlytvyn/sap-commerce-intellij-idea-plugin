@@ -83,10 +83,6 @@ public final class HybrisHacHttpClient extends UserDataHolderBase {
     private static final Logger LOG = Logger.getInstance(HybrisHacHttpClient.class);
     public static final int DEFAULT_HAC_TIMEOUT = 6000;
 
-    public static HybrisHacHttpClient getInstance(@NotNull final Project project) {
-        return project.getService(HybrisHacHttpClient.class);
-    }
-
     @Serial
     private static final long serialVersionUID = -4915832410081381025L;
 
@@ -109,53 +105,13 @@ public final class HybrisHacHttpClient extends UserDataHolderBase {
 
     private final Map<Pair<RemoteConnectionSettings, ReplicaContext>, Map<String, String>> cookiesPerSettings = new WeakHashMap<>();
 
-    public String login(
-        @NotNull final RemoteConnectionSettings settings,
-        @Nullable final ReplicaContext replicaContext,
-        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
-    ) {
-        final var hostHacURL = settings.getGeneratedURL();
+    public static HybrisHacHttpClient getInstance(final Project project) {
+        return project.getService(HybrisHacHttpClient.class);
+    }
 
-        retrieveCookies(hostHacURL, settings, replicaContext, cookiesKey);
-
-        final var cookieName = getCookieName(settings);
-        final var sessionId = Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
-            .map(it -> it.get(cookieName))
-            .orElse(null);
-        if (sessionId == null) {
-            return "Unable to obtain sessionId for " + hostHacURL;
-        }
-        final var csrfToken = getCsrfToken(hostHacURL, settings, cookiesKey);
-        final var params = List.of(
-            new BasicNameValuePair("j_username", settings.getUsername()),
-            new BasicNameValuePair("j_password", settings.getPassword()),
-            new BasicNameValuePair("_csrf", csrfToken)
-        );
-        final var loginURL = hostHacURL + "/j_spring_security_check";
-        final HttpResponse response = post(loginURL, params, false, HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT, settings, replicaContext);
-        if (response.getStatusLine().getStatusCode() == HttpStatus.SC_MOVED_TEMPORARILY) {
-            final Header location = response.getFirstHeader("Location");
-            if (location != null && location.getValue().contains("login_error")) {
-                return "Wrong username/password. Set your credentials in [y] tool window.";
-            }
-        }
-        final var newSessionId = CookieParser.getInstance().getSpecialCookie(response.getAllHeaders());
-        if (newSessionId != null) {
-            Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
-                .ifPresent(cookies -> cookies.put(cookieName, newSessionId));
-            return StringUtils.EMPTY;
-        }
-        final int statusCode = response.getStatusLine().getStatusCode();
-        final StringBuilder sb = new StringBuilder();
-        sb.append("HTTP ");
-        sb.append(statusCode);
-        sb.append(' ');
-        switch (statusCode) {
-            case HTTP_OK -> sb.append("Unable to obtain sessionId from response");
-            case HTTP_MOVED_TEMP -> sb.append(response.getFirstHeader("Location"));
-            default -> sb.append(response.getStatusLine().getReasonPhrase());
-        }
-        return sb.toString();
+    @NotNull
+    public String testConnection(@NotNull final RemoteConnectionSettings settings) {
+        return login(settings, null, Pair.pair(settings, null));
     }
 
     @NotNull
@@ -231,6 +187,55 @@ public final class HybrisHacHttpClient extends UserDataHolderBase {
             }
         }
         return response;
+    }
+
+    private String login(
+        @NotNull final RemoteConnectionSettings settings,
+        @Nullable final ReplicaContext replicaContext,
+        final Pair<RemoteConnectionSettings, ReplicaContext> cookiesKey
+    ) {
+        final var hostHacURL = settings.getGeneratedURL();
+
+        retrieveCookies(hostHacURL, settings, replicaContext, cookiesKey);
+
+        final var cookieName = getCookieName(settings);
+        final var sessionId = Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
+            .map(it -> it.get(cookieName))
+            .orElse(null);
+        if (sessionId == null) {
+            return "Unable to obtain sessionId for " + hostHacURL;
+        }
+        final var csrfToken = getCsrfToken(hostHacURL, settings, cookiesKey);
+        final var params = List.of(
+            new BasicNameValuePair("j_username", settings.getUsername()),
+            new BasicNameValuePair("j_password", settings.getPassword()),
+            new BasicNameValuePair("_csrf", csrfToken)
+        );
+        final var loginURL = hostHacURL + "/j_spring_security_check";
+        final HttpResponse response = post(loginURL, params, false, HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT, settings, replicaContext);
+        if (response.getStatusLine().getStatusCode() == HttpStatus.SC_MOVED_TEMPORARILY) {
+            final Header location = response.getFirstHeader("Location");
+            if (location != null && location.getValue().contains("login_error")) {
+                return "Wrong username/password. Set your credentials in [y] tool window.";
+            }
+        }
+        final var newSessionId = CookieParser.getInstance().getSpecialCookie(response.getAllHeaders());
+        if (newSessionId != null) {
+            Optional.ofNullable(cookiesPerSettings.get(cookiesKey))
+                .ifPresent(cookies -> cookies.put(cookieName, newSessionId));
+            return StringUtils.EMPTY;
+        }
+        final int statusCode = response.getStatusLine().getStatusCode();
+        final StringBuilder sb = new StringBuilder();
+        sb.append("HTTP ");
+        sb.append(statusCode);
+        sb.append(' ');
+        switch (statusCode) {
+            case HTTP_OK -> sb.append("Unable to obtain sessionId from response");
+            case HTTP_MOVED_TEMP -> sb.append(response.getFirstHeader("Location"));
+            default -> sb.append(response.getStatusLine().getReasonPhrase());
+        }
+        return sb.toString();
     }
 
     private HttpResponse createErrorResponse(final String reasonPhrase) {

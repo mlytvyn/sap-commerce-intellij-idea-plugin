@@ -26,12 +26,10 @@ import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.system.bean.meta.BSGlobalMetaModel
 import com.intellij.idea.plugin.hybris.system.bean.meta.BSMetaModelStateService
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.toolwindow.system.bean.components.BSTreePanel
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
@@ -41,12 +39,11 @@ import com.intellij.ui.components.JBPanel
 import java.awt.GridBagLayout
 import java.io.Serial
 
-class BSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Disposable {
+class BSView(private val project: Project) : SimpleToolWindowPanel(false, true), Disposable {
 
     private val myBeansViewActionGroup: DefaultActionGroup by lazy(::initBeansViewActionGroup)
-    private val mySettings = BSViewSettings.getInstance(myProject)
-    private val myTreePane = BSTreePanel(myProject)
-    private val metaModelStateService by lazy { myProject.service<BSMetaModelStateService>() }
+    private val mySettings = BSViewSettings.getInstance(project)
+    private val myTreePane = BSTreePanel(project)
 
     override fun dispose() {
         //NOP
@@ -56,12 +53,12 @@ class BSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
         installToolbar()
 
         when {
-            DumbService.isDumb(myProject) -> with(JBPanel<JBPanel<*>>(GridBagLayout())) {
+            DumbService.isDumb(project) -> with(JBPanel<JBPanel<*>>(GridBagLayout())) {
                 add(JBLabel(message("hybris.toolwindow.bs.suspended.text", IdeBundle.message("progress.performing.indexing.tasks"))))
                 setContent(this)
             }
 
-            !metaModelStateService.initialized() -> setContentInitializing()
+            !BSMetaModelStateService.getInstance(project).initialized() -> setContentInitializing()
 
             else -> refreshContent(BSViewSettings.ChangeType.FULL)
         }
@@ -84,13 +81,13 @@ class BSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
     }
 
     private fun installSettingsListener() {
-        with(myProject.messageBus.connect(this)) {
-            subscribe(BSViewSettings.TOPIC, object : BSViewSettings.Listener {
+        with(project.messageBus.connect(this)) {
+            subscribe(BSViewSettings.BSViewListener.TOPIC, object : BSViewSettings.BSViewListener {
                 override fun settingsChanged(changeType: BSViewSettings.ChangeType) {
                     refreshContent(changeType)
                 }
             })
-            subscribe(MetaModelStateService.TOPIC, object : MetaModelChangeListener {
+            subscribe(MetaModelChangeListener.TOPIC, object : MetaModelChangeListener {
                 override fun beanSystemChanged(globalMetaModel: BSGlobalMetaModel) {
                     refreshContent(globalMetaModel, BSViewSettings.ChangeType.FULL)
                 }
@@ -100,7 +97,7 @@ class BSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
 
     private fun refreshContent(changeType: BSViewSettings.ChangeType) {
         try {
-            refreshContent(metaModelStateService.get(), changeType)
+            refreshContent(BSMetaModelStateService.state(project), changeType)
         } catch (_: Throwable) {
             setContentInitializing()
         }

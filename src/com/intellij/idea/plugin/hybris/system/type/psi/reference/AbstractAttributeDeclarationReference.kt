@@ -22,7 +22,6 @@ import com.intellij.codeInsight.highlighting.HighlightedReference
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.psi.util.PsiUtils
 import com.intellij.idea.plugin.hybris.system.type.codeInsight.completion.TSCompletionService
-import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaItemService
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelAccess
 import com.intellij.idea.plugin.hybris.system.type.meta.TSModificationTracker
 import com.intellij.idea.plugin.hybris.system.type.meta.model.TSGlobalMetaEnum
@@ -30,7 +29,6 @@ import com.intellij.idea.plugin.hybris.system.type.meta.model.TSGlobalMetaItem
 import com.intellij.idea.plugin.hybris.system.type.meta.model.TSGlobalMetaRelation
 import com.intellij.idea.plugin.hybris.system.type.psi.reference.result.AttributeResolveResult
 import com.intellij.idea.plugin.hybris.system.type.psi.reference.result.RelationEndResolveResult
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.TextRange
@@ -44,7 +42,8 @@ abstract class AbstractAttributeDeclarationReference : PsiReferenceBase.Poly<Psi
     constructor(element: PsiElement) : super(element, false)
     constructor(element: PsiElement, textRange: TextRange) : super(element, textRange, false)
 
-    private val cacheKey = Key.create<ParameterizedCachedValue<Array<ResolveResult>, AbstractAttributeDeclarationReference>>("HYBRIS_TS_CACHED_REFERENCE_${rangeInElement.startOffset}")
+    private val cacheKey =
+        Key.create<ParameterizedCachedValue<Array<ResolveResult>, AbstractAttributeDeclarationReference>>("HYBRIS_TS_CACHED_REFERENCE_${rangeInElement.startOffset}")
 
     override fun calculateDefaultRangeInElement(): TextRange =
         if (element.textLength == 0) super.calculateDefaultRangeInElement()
@@ -70,7 +69,6 @@ abstract class AbstractAttributeDeclarationReference : PsiReferenceBase.Poly<Psi
         private val provider = ParameterizedCachedValueProvider<Array<ResolveResult>, AbstractAttributeDeclarationReference> { ref ->
             val project = ref.element.project
             val metaModelAccess = TSMetaModelAccess.getInstance(project)
-            val metaItemService = TSMetaItemService.getInstance(project)
             val type = ref.resolveType(ref.element)
                 ?: return@ParameterizedCachedValueProvider emptyResult(project)
 
@@ -86,23 +84,22 @@ abstract class AbstractAttributeDeclarationReference : PsiReferenceBase.Poly<Psi
             }
 
             val originalValue = ref.value
-            val result = metaItemService.findAttributesByName(metaItem, originalValue, true)
-                ?.firstOrNull()
+            val result = metaModelAccess.findAttributeByName(metaItem, originalValue, true)
                 ?.let { PsiUtils.getValidResults(arrayOf(AttributeResolveResult(it))) }
-                ?: metaItemService.findRelationEndsByQualifier(metaItem, originalValue, true)
+                ?: metaModelAccess.findRelationEndsByQualifier(metaItem, originalValue, true)
                     ?.firstOrNull()
                     ?.let { PsiUtils.getValidResults(arrayOf(RelationEndResolveResult(it))) }
                 ?: emptyArray()
 
             CachedValueProvider.Result.create(
                 result,
-                project.service<TSModificationTracker>(), PsiModificationTracker.MODIFICATION_COUNT
+                TSModificationTracker.getInstance(project), PsiModificationTracker.MODIFICATION_COUNT
             )
         }
 
         private fun emptyResult(project: Project): CachedValueProvider.Result<Array<ResolveResult>> = CachedValueProvider.Result.create(
             emptyArray(),
-            project.service<TSModificationTracker>(), PsiModificationTracker.MODIFICATION_COUNT
+            TSModificationTracker.getInstance(project), PsiModificationTracker.MODIFICATION_COUNT
         )
     }
 }

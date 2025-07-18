@@ -71,7 +71,7 @@ class CommonIdeaService {
         .firstNotNullOfOrNull { it as? PlatformModuleDescriptor }
 
     fun fixRemoteConnectionSettings(project: Project) {
-        val remoteConnectionService = project.service<RemoteConnectionService>()
+        val remoteConnectionService = RemoteConnectionService.getInstance(project)
         listOf(
             RemoteConnectionType.Hybris,
             RemoteConnectionType.SOLR
@@ -102,6 +102,6 @@ class CommonIdeaService {
         private val regex = "https?://".toRegex()
 
         @JvmStatic
-        fun getInstance(): CommonIdeaService = application.getService(CommonIdeaService::class.java)
+        fun getInstance(): CommonIdeaService = application.service()
     }
 }
