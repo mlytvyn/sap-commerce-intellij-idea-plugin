@@ -32,6 +32,7 @@ import org.apache.http.HttpStatus
 import org.apache.http.message.BasicNameValuePair
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import java.io.IOException
 import java.io.Serial
 import java.nio.charset.StandardCharsets
@@ -40,86 +41,72 @@ import java.nio.charset.StandardCharsets
 class ImpExExecutionClient(project: Project, coroutineScope: CoroutineScope) : DefaultExecutionClient<ImpExExecutionContext>(project, coroutineScope) {
 
     override suspend fun execute(context: ImpExExecutionContext): DefaultExecutionResult {
-        val settings = project.service<RemoteConnectionService>().getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
-
-        val params = context.params()
-            .map { BasicNameValuePair(it.key, it.value) }
+        val settings = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
         val actionUrl = when (context.executionMode) {
             ExecutionMode.IMPORT -> settings.generatedURL + "/console/impex/import"
             ExecutionMode.VALIDATE -> settings.generatedURL + "/console/impex/import/validate"
         }
+        val params = context.params()
+            .map { BasicNameValuePair(it.key, it.value) }
 
         val response = HybrisHacHttpClient.getInstance(project)
-            .post(actionUrl, params, false, HybrisHacHttpClient.DEFAULT_HAC_TIMEOUT, settings, null)
-
+            .post(actionUrl, params, false, context.timeout, settings, null)
         val statusLine = response.statusLine
+        val statusCode = statusLine.statusCode
 
-        if (statusLine.statusCode != HttpStatus.SC_OK) {
-            return DefaultExecutionResult(
-                statusCode = statusLine.statusCode,
-                errorMessage = statusLine.reasonPhrase
-            )
-        }
-
-        val result = DefaultExecutionResult(
-            statusCode = statusLine.statusCode
+        if (statusCode != HttpStatus.SC_OK || response.entity == null) return DefaultExecutionResult(
+            statusCode = statusCode,
+            errorMessage = statusLine.reasonPhrase
         )
 
         try {
             val document = Jsoup.parse(response.entity.content, StandardCharsets.UTF_8.name(), "")
 
-            when (context.executionMode) {
-                ExecutionMode.IMPORT -> processImportResponse(document, result)
-                ExecutionMode.VALIDATE -> processValidateResponse(document, result)
+            return when (context.executionMode) {
+                ExecutionMode.IMPORT -> processResponse(document, "impexResult") { element ->
+                    if (element.attr("data-level") == "error") DefaultExecutionResult(
+                        statusCode = HttpStatus.SC_BAD_REQUEST,
+                        errorMessage = element.attr("data-result").takeIf { it.isNotBlank() },
+                        detailMessage = element.first().children().first()?.text()
+                            ?: "No data in response"
+                    )
+                    else DefaultExecutionResult(
+                        output = element.attr("data-result").takeIf { it.isNotBlank() }
+                    )
+                }
+
+                ExecutionMode.VALIDATE -> processResponse(document, "validationResultMsg") { element ->
+                    if ("error" == element.attr("data-level")) DefaultExecutionResult(
+                        statusCode = HttpStatus.SC_BAD_REQUEST,
+                        errorMessage = element.attr("data-result").takeIf { it.isNotBlank() }
+                    )
+                    else DefaultExecutionResult(
+                        output = element.attr("data-result").takeIf { it.isNotBlank() }
+                    )
+                }
             }
         } catch (e: IOException) {
             thisLogger().warn(e.message, e)
 
-            result.errorMessage = e.message
+            return DefaultExecutionResult(
+                errorMessage = e.message,
+            )
         }
-
-        return result
     }
 
-    private fun processImportResponse(document: Document, result: DefaultExecutionResult) {
-        document.getElementById("impexResult")
-            ?.takeIf { it.hasAttr("data-level") && it.hasAttr("data-result") }
-            ?.let { resultElement ->
-                val dataResult = resultElement.attr("data-result")
-                if (resultElement.attr("data-level") == "error") {
-                    document.getElementsByClass("impexResult")
-                        .first()?.children()?.first()?.text()
-                        ?.let { it ->
-                            result.errorMessage = dataResult
-                            result.detailMessage = it
-                        }
-                        ?: "No data in response".let { result.errorMessage = it }
-                } else {
-                    result.output = dataResult
-                }
-            }
-            ?: "No data in response".let { result.errorMessage = it }
-
-    }
-
-    private fun processValidateResponse(document: Document, result: DefaultExecutionResult) {
-        document.getElementById("validationResultMsg")
-            ?.takeIf { it.hasAttr("data-level") && it.hasAttr("data-result") }
-            ?.let {
-                if ("error" == it.attr("data-level")) {
-                    val dataResult = it.attr("data-result")
-                    result.errorMessage = dataResult
-                } else {
-                    val dataResult = it.attr("data-result")
-                    result.output = dataResult
-                }
-            }
-            ?: "No data in response".let { result.errorMessage = it }
-    }
+    private fun processResponse(document: Document, id: String, mapper: (Element) -> DefaultExecutionResult) = document.getElementById(id)
+        ?.takeIf { it.hasAttr("data-level") && it.hasAttr("data-result") }
+        ?.let { mapper.invoke(it) }
+        ?: DefaultExecutionResult(
+            statusCode = HttpStatus.SC_BAD_REQUEST,
+            errorMessage = "No data in response"
+        )
 
     companion object {
         @Serial
         private const val serialVersionUID: Long = -1646069318244320642L
+
+        fun getInstance(project: Project): ImpExExecutionClient = project.service()
     }
 
 }

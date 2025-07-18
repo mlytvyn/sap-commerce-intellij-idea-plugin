@@ -18,6 +18,7 @@
 
 package com.intellij.idea.plugin.hybris.system.type.meta
 
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.model.Items
 import com.intellij.openapi.application.readAction
@@ -29,16 +30,21 @@ import kotlinx.coroutines.CoroutineScope
 @Service(Service.Level.PROJECT)
 class TSMetaModelStateService(project: Project, coroutineScope: CoroutineScope) : MetaModelStateService<TSGlobalMetaModel, TSMetaModel, Items>(
     project, coroutineScope, "Type",
-    project.service<TSMetaCollector>(),
-    project.service<TSMetaModelProcessor>()
+    TSMetaCollector.getInstance(project),
+    TSMetaModelProcessor.getInstance(project)
 ) {
 
     override fun onCompletion(newState: TSGlobalMetaModel) {
-        project.messageBus.syncPublisher(TOPIC).typeSystemChanged(newState)
+        project.messageBus.syncPublisher(MetaModelChangeListener.TOPIC).typeSystemChanged(newState)
     }
 
     override suspend fun create(metaModelsToMerge: Collection<TSMetaModel>): TSGlobalMetaModel = TSGlobalMetaModel().also {
         readAction { TSMetaModelMerger.merge(it, metaModelsToMerge.sortedBy { meta -> !meta.custom }) }
+    }
+
+    companion object {
+        fun state(project: Project) = getInstance(project).get()
+        fun getInstance(project: Project): TSMetaModelStateService = project.service()
     }
 
 }

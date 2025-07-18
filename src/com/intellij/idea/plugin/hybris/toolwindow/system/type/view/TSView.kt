@@ -24,14 +24,13 @@ import com.intellij.idea.ActionsBundle
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
-import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.meta.TSGlobalMetaModel
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
 import com.intellij.idea.plugin.hybris.toolwindow.system.type.components.TSTreePanel
+import com.intellij.idea.plugin.hybris.toolwindow.system.type.view.TSViewSettings.TSViewListener
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
@@ -41,12 +40,11 @@ import com.intellij.ui.components.JBPanel
 import java.awt.GridBagLayout
 import java.io.Serial
 
-class TSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Disposable {
+class TSView(private val project: Project) : SimpleToolWindowPanel(false, true), Disposable {
 
     private val myItemsViewActionGroup: DefaultActionGroup by lazy(::initItemsViewActionGroup)
-    private val mySettings = TSViewSettings.getInstance(myProject)
-    private val myTreePane = TSTreePanel(myProject)
-    private val metaModelStateService by lazy { myProject.service<TSMetaModelStateService>() }
+    private val mySettings = TSViewSettings.getInstance(project)
+    private val myTreePane = TSTreePanel(project)
 
     override fun dispose() {
         //NOP
@@ -56,12 +54,12 @@ class TSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
         installToolbar()
 
         when {
-            DumbService.isDumb(myProject) -> with(JBPanel<JBPanel<*>>(GridBagLayout())) {
+            DumbService.isDumb(project) -> with(JBPanel<JBPanel<*>>(GridBagLayout())) {
                 add(JBLabel(message("hybris.toolwindow.ts.suspended.text", IdeBundle.message("progress.performing.indexing.tasks"))))
                 setContent(this)
             }
 
-            !metaModelStateService.initialized() -> setContentInitializing()
+            !TSMetaModelStateService.getInstance(project).initialized() -> setContentInitializing()
 
             else -> refreshContent(TSViewSettings.ChangeType.FULL)
         }
@@ -84,13 +82,13 @@ class TSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
     }
 
     private fun installSettingsListener() {
-        with(myProject.messageBus.connect(this)) {
-            subscribe(TSViewSettings.TOPIC, object : TSViewSettings.Listener {
+        with(project.messageBus.connect(this)) {
+            subscribe(TSViewListener.TOPIC, object : TSViewSettings.TSViewListener {
                 override fun settingsChanged(changeType: TSViewSettings.ChangeType) {
                     refreshContent(changeType)
                 }
             })
-            subscribe(MetaModelStateService.TOPIC, object : MetaModelChangeListener {
+            subscribe(MetaModelChangeListener.TOPIC, object : MetaModelChangeListener {
                 override fun typeSystemChanged(globalMetaModel: TSGlobalMetaModel) {
                     refreshContent(globalMetaModel, TSViewSettings.ChangeType.FULL)
                 }
@@ -100,7 +98,7 @@ class TSView(val myProject: Project) : SimpleToolWindowPanel(false, true), Dispo
 
     private fun refreshContent(changeType: TSViewSettings.ChangeType) {
         try {
-            refreshContent(metaModelStateService.get(), changeType)
+            refreshContent(TSMetaModelStateService.state(project), changeType)
         } catch (_: Throwable) {
             setContentInitializing()
         }

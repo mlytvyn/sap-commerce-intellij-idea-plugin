@@ -19,6 +19,7 @@
 package com.intellij.idea.plugin.hybris.system.bean.meta
 
 import com.intellij.idea.plugin.hybris.system.bean.model.Beans
+import com.intellij.idea.plugin.hybris.system.meta.MetaModelChangeListener
 import com.intellij.idea.plugin.hybris.system.meta.MetaModelStateService
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
@@ -29,16 +30,21 @@ import kotlinx.coroutines.CoroutineScope
 @Service(Service.Level.PROJECT)
 class BSMetaModelStateService(project: Project, coroutineScope: CoroutineScope) : MetaModelStateService<BSGlobalMetaModel, BSMetaModel, Beans>(
     project, coroutineScope, "Bean",
-    project.service<BSMetaCollector>(),
-    project.service<BSMetaModelProcessor>()
+    BSMetaCollector.getInstance(project),
+    BSMetaModelProcessor.getInstance(project)
 ) {
 
     override fun onCompletion(newState: BSGlobalMetaModel) {
-        project.messageBus.syncPublisher(TOPIC).beanSystemChanged(newState)
+        project.messageBus.syncPublisher(MetaModelChangeListener.TOPIC).beanSystemChanged(newState)
     }
 
     override suspend fun create(metaModelsToMerge: Collection<BSMetaModel>): BSGlobalMetaModel = BSGlobalMetaModel().also {
         readAction { BSMetaModelMerger.merge(it, metaModelsToMerge.sortedBy { meta -> !meta.custom }) }
+    }
+
+    companion object {
+        fun state(project: Project) = getInstance(project).get()
+        fun getInstance(project: Project): BSMetaModelStateService = project.service()
     }
 
 }

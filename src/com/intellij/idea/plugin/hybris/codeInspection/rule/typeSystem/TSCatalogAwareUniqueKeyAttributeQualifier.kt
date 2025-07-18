@@ -20,13 +20,12 @@ package com.intellij.idea.plugin.hybris.codeInspection.rule.typeSystem
 
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaHelper
-import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaItemService
+import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelAccess
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.model.ItemType
 import com.intellij.idea.plugin.hybris.system.type.model.Items
 import com.intellij.idea.plugin.hybris.system.type.model.all
 import com.intellij.lang.annotation.HighlightSeverity
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xml.highlighting.DomElementAnnotationHolder
 import com.intellij.util.xml.highlighting.DomHighlightingHelper
@@ -49,18 +48,22 @@ class TSCatalogAwareUniqueKeyAttributeQualifier : AbstractTSInspection() {
         severity: HighlightSeverity,
         project: Project
     ) {
-        val meta = project.service<TSMetaModelStateService>().get().getMetaItem(dom.code.stringValue)
+        val meta = TSMetaModelStateService.state(project).getMetaItem(dom.code.stringValue)
             ?: return
         val domCustomProperty = TSMetaHelper.getProperty(dom.customProperties, HybrisConstants.TS_UNIQUE_KEY_ATTRIBUTE_QUALIFIER)
             ?: return
         val customPropertyValue = TSMetaHelper.parseCommaSeparatedStringValue(domCustomProperty)
             ?: return
 
-        val metaItemService = TSMetaItemService.getInstance(project)
+        val metaModelAccess = TSMetaModelAccess.getInstance(project)
         val nonUniqueQualifiers = customPropertyValue
-            .filter {qualifier ->
-                val attributes = metaItemService.findAttributesByName(meta, qualifier, true).map { it.modifiers }
-                val referenceEnds = metaItemService.findRelationEndsByQualifier(meta, qualifier, true).map { it.modifiers }
+            .filter { qualifier ->
+                val attributes = metaModelAccess.findAttributeByName(meta, qualifier, true)
+                    ?.let { listOf(it.modifiers) }
+                    ?: emptyList()
+                val referenceEnds = metaModelAccess.findRelationEndsByQualifier(meta, qualifier, true)
+                    ?.map { it.modifiers }
+                    ?: emptyList()
 
                 (attributes + referenceEnds).none { it.isUnique }
             }

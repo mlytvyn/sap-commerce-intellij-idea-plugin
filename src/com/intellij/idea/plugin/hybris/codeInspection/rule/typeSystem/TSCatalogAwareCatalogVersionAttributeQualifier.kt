@@ -20,13 +20,12 @@ package com.intellij.idea.plugin.hybris.codeInspection.rule.typeSystem
 
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaHelper
-import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaItemService
+import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelAccess
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
 import com.intellij.idea.plugin.hybris.system.type.model.ItemType
 import com.intellij.idea.plugin.hybris.system.type.model.Items
 import com.intellij.idea.plugin.hybris.system.type.model.all
 import com.intellij.lang.annotation.HighlightSeverity
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.util.xml.highlighting.DomElementAnnotationHolder
 import com.intellij.util.xml.highlighting.DomHighlightingHelper
@@ -49,7 +48,7 @@ class TSCatalogAwareCatalogVersionAttributeQualifier : AbstractTSInspection() {
         severity: HighlightSeverity,
         project: Project
     ) {
-        val metaModel = project.service<TSMetaModelStateService>().get()
+        val metaModel = TSMetaModelStateService.state(project)
 
         val meta = metaModel.getMetaItem(dom.code.stringValue)
             ?: return
@@ -58,18 +57,8 @@ class TSCatalogAwareCatalogVersionAttributeQualifier : AbstractTSInspection() {
         val qualifier = TSMetaHelper.parseStringValue(domCustomProperty)
             ?: return
 
-        val metaItemService = TSMetaItemService.getInstance(project)
-        val attributes = metaItemService.findAttributesByName(meta, qualifier, true)
-
-        val isAttributeTypeCatalogAware = attributes
-            .any { attribute ->
-                HybrisConstants.TS_TYPE_CATALOG_VERSION.equals(attribute.type, true)
-                || metaModel.getMetaItem(attribute.type)?.let { attributeTypeMeta ->
-                    attributeTypeMeta.allExtends
-                        .mapNotNull { it.name }
-                        .any { HybrisConstants.TS_TYPE_CATALOG_VERSION.equals(it, true) }
-                } ?: false
-            }
+        val isAttributeTypeCatalogAware = TSMetaModelAccess.getInstance(project)
+            .isCatalogAware(meta, qualifier, true)
 
         if (!isAttributeTypeCatalogAware) {
             holder.createProblem(

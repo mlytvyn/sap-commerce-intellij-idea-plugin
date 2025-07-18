@@ -1,6 +1,5 @@
 /*
  * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
- * Copyright (C) 2014-2016 Alexander Bartash <AlexanderBartash@gmail.com>
  * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,23 +15,16 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.tools.remote.execution
 
-import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
-import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.ReplicaContext
-import org.apache.http.HttpStatus
+package com.intellij.idea.plugin.hybris.settings
 
-data class DefaultExecutionResult(
-    val remoteConnectionType: RemoteConnectionType = RemoteConnectionType.Hybris,
-    val statusCode: Int = HttpStatus.SC_OK,
-    val result: String? = null,
-    val output: String? = null,
-    val errorMessage: String? = null,
-    val detailMessage: String? = null,
-    val replicaContext: ReplicaContext? = null,
-) : ExecutionResult {
+import com.intellij.util.messages.Topic
 
-    val hasError
-        get() = errorMessage != null
+interface RemoteConnectionListener {
+    fun onActiveHybrisConnectionChanged(remoteConnection: RemoteConnectionSettings) = Unit
+    fun onActiveSolrConnectionChanged(remoteConnection: RemoteConnectionSettings) = Unit
 
+    companion object {
+        val TOPIC = Topic(RemoteConnectionListener::class.java)
+    }
 }

@@ -38,7 +38,7 @@ class AclLineEditorFactoryListener : EditorFactoryListener {
         val editor = event.editor
         val project = editor.project ?: return
 
-        project.service<AclLineHighlighterService>().highlight(editor)
+        AclLineHighlighterService.getInstance(project).highlight(editor)
     }
 }
 
@@ -55,5 +55,9 @@ private class AclLineHighlighterService(private val project: Project, private va
             }
                 ?.forEach { AclEditorMarkupModelHelper.highlightValueLineType(editor, it.textOffset) }
         }
+    }
+
+    companion object {
+        fun getInstance(project: Project): AclLineHighlighterService = project.service()
     }
 }
