@@ -26,6 +26,7 @@ import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2EnvironmentDto
 import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2ServiceDto
 import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2ServiceProperties
 import com.intellij.idea.plugin.hybris.tools.ccv2.ui.*
+import com.intellij.idea.plugin.hybris.toolwindow.ccv2.CCv2ViewUtil
 import com.intellij.idea.plugin.hybris.ui.Dsl
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -49,8 +50,8 @@ import javax.swing.JPanel
 class CCv2ServiceDetailsView(
     private val project: Project,
     private val subscription: CCv2Subscription,
-    private var environment: CCv2EnvironmentDto,
-    private var service: CCv2ServiceDto,
+    private val environment: CCv2EnvironmentDto,
+    service: CCv2ServiceDto,
 ) : SimpleToolWindowPanel(false, true), Disposable {
 
     private val showCustomerProperties by lazy { AtomicBooleanProperty(service.customerProperties != null) }
@@ -69,38 +70,37 @@ class CCv2ServiceDetailsView(
         JBPanel<JBPanel<*>>(GridBagLayout())
             .also { border = JBUI.Borders.empty() }
     }
-    private var rootPanel = rootPanel()
 
     override fun dispose() {
         // NOP
     }
 
     init {
-        installToolbar()
-        initPanel()
+        initPanel(service)
     }
 
-    private fun installToolbar() {
+    private fun installToolbar(service: CCv2ServiceDto) {
         val toolbar = with(DefaultActionGroup()) {
             val actionManager = ActionManager.getInstance()
 
+            add(
+                CCv2FetchEnvironmentServiceAction(
+                    subscription,
+                    environment,
+                    service,
+                    {
+                        // hard reset service details on re-fetch
+                        it.initialPasswords = null
+                        it.customerProperties = null
+                        it.greenDeploymentSupported = null
+
+                        initPanel(it)
+                    }
+                ))
+            add(actionManager.getAction("ccv2.reset.cache.action"))
+
+            addSeparator()
             add(actionManager.getAction("ccv2.service.toolbar.actions"))
-            add(CCv2FetchEnvironmentServiceAction(
-                subscription,
-                environment,
-                service,
-                {
-                },
-                {
-                    service = it
-
-                    this@CCv2ServiceDetailsView.remove(rootPanel)
-                    rootPanel = rootPanel()
-
-                    initPanel()
-                }
-            ))
-
 
             actionManager.createActionToolbar("SAP_CX_CCv2_SERVICE_${System.identityHashCode(service)}", this, false)
         }
@@ -108,35 +108,38 @@ class CCv2ServiceDetailsView(
         setToolbar(toolbar.component)
     }
 
-    private fun initPanel() {
-        add(rootPanel)
+    private fun initPanel(service: CCv2ServiceDto) {
+        removeAll()
+
+        add(rootPanel(service))
+        installToolbar(service)
 
         initPropertiesPanel(
+            service,
             CCv2ServiceProperties.INITIAL_PASSWORDS,
             service.initialPasswords,
             showInitialPasswords,
             initialPasswordsPanel,
-            { service.initialPasswords = null },
             { service.initialPasswords = it },
             { propertiesPanel(it) }
         )
 
         initPropertiesPanel(
+            service,
             CCv2ServiceProperties.CUSTOMER_PROPERTIES,
             service.customerProperties,
             showCustomerProperties,
             customerPropertiesPanel,
-            { service.customerProperties = null },
             { service.customerProperties = it },
             { propertiesPanel(it) }
         )
 
         initPropertiesPanel(
+            service,
             CCv2ServiceProperties.GREEN_DEPLOYMENT_SUPPORTED,
             service.greenDeploymentSupported?.let { mapOf(CCv2ServiceProperties.GREEN_DEPLOYMENT_SUPPORTED_KEY to it.toString()) },
             showGreenDeploymentSupported,
             greenDeploymentSupportedPanel,
-            { service.greenDeploymentSupported = null },
             { service.greenDeploymentSupported = it?.get(CCv2ServiceProperties.GREEN_DEPLOYMENT_SUPPORTED_KEY)?.let { value -> value == "true" } },
             { greenDeploymentSupportedPanel(service.greenDeploymentSupported) }
         )
@@ -162,39 +165,41 @@ class CCv2ServiceDetailsView(
     }
 
     private fun initPropertiesPanel(
+        service: CCv2ServiceDto,
         serviceProperties: CCv2ServiceProperties,
         currentProperties: Map<String, String>?,
         showFlag: AtomicBooleanProperty,
-        panel: JPanel,
-        onStartCallback: () -> Unit,
+        container: JPanel,
         onCompleteCallback: (Map<String, String>?) -> Unit,
         panelProvider: (Map<String, String>) -> DialogPanel
     ) {
         if (!service.supportedProperties.contains(serviceProperties)) return
 
+        container.removeAll()
+
         if (currentProperties != null) {
-            panel.removeAll()
-            panel.add(panelProvider.invoke(currentProperties))
-        } else {
-            CCv2Service.getInstance(project).fetchEnvironmentServiceProperties(subscription, environment, service, serviceProperties,
-                {
-                    showFlag.set(false)
-                    onStartCallback.invoke()
-                    panel.removeAll()
-                },
-                {
-                    onCompleteCallback.invoke(it)
+            container.add(panelProvider.invoke(currentProperties))
 
-                    invokeLater {
-                        showFlag.set(it != null)
-
-                        if (it != null) {
-                            panel.add(panelProvider.invoke(it))
-                        }
-                    }
-                }
-            )
+            return
         }
+
+        showFlag.set(false)
+
+        CCv2Service.getInstance(project).fetchEnvironmentServiceProperties(
+            subscription, environment, service, serviceProperties,
+            {
+                onCompleteCallback.invoke(it)
+
+                invokeLater {
+                    val panel = if (it != null) panelProvider.invoke(it)
+                    else CCv2ViewUtil.noDataPanel("No ${serviceProperties.title} found")
+
+                    container.removeAll()
+                    container.add(panel)
+                    showFlag.set(true)
+                }
+            }
+        )
     }
 
     private fun propertiesPanel(properties: Map<String, String>) = panel {
@@ -216,7 +221,7 @@ class CCv2ServiceDetailsView(
         }
     }
 
-    private fun rootPanel() = panel {
+    private fun rootPanel(service: CCv2ServiceDto) = panel {
         indent {
             row {
                 label("${environment.name} - ${service.name}")

@@ -30,6 +30,7 @@ import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2DataBackupDto
 import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2EnvironmentDto
 import com.intellij.idea.plugin.hybris.tools.ccv2.dto.CCv2ServiceDto
 import com.intellij.idea.plugin.hybris.tools.ccv2.ui.*
+import com.intellij.idea.plugin.hybris.toolwindow.ccv2.CCv2ViewUtil
 import com.intellij.idea.plugin.hybris.ui.Dsl
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
@@ -54,7 +55,7 @@ import java.io.Serial
 class CCv2EnvironmentDetailsView(
     private val project: Project,
     private val subscription: CCv2Subscription,
-    private var environment: CCv2EnvironmentDto
+    environment: CCv2EnvironmentDto
 ) : SimpleToolWindowPanel(false, true), Disposable {
 
     private val showBuild = AtomicBooleanProperty(environment.deployedBuild != null)
@@ -67,37 +68,36 @@ class CCv2EnvironmentDetailsView(
         .also { border = JBUI.Borders.empty() }
     private val dataBackupsPanel = JBPanel<JBPanel<*>>(GridBagLayout())
         .also { border = JBUI.Borders.empty() }
-    private var rootPanel = rootPanel()
 
     override fun dispose() {
         // NOP
     }
 
     init {
-        installToolbar()
-        initPanel()
+        initPanel(environment)
     }
 
-    private fun installToolbar() {
+    private fun installToolbar(environment: CCv2EnvironmentDto) {
         val toolbar = with(DefaultActionGroup()) {
             val actionManager = ActionManager.getInstance()
 
+            add(
+                CCv2FetchEnvironmentAction(
+                    subscription,
+                    environment,
+                    {
+                        // hard reset env details on re-fetch
+                        it.services = null
+                        it.dataBackups = null
+                        it.deployedBuild = null
+
+                        initPanel(it)
+                    }
+                ))
+            add(actionManager.getAction("ccv2.reset.cache.action"))
+            addSeparator()
+
             add(actionManager.getAction("ccv2.environment.toolbar.actions"))
-            add(CCv2FetchEnvironmentAction(
-                subscription,
-                environment,
-                {
-                },
-                {
-                    environment = it
-
-                    this@CCv2EnvironmentDetailsView.remove(rootPanel)
-                    rootPanel = rootPanel()
-
-                    initPanel()
-                }
-            ))
-
 
             actionManager.createActionToolbar("SAP_CX_CCv2_ENVIRONMENT_${System.identityHashCode(environment)}", this, false)
         }
@@ -105,93 +105,96 @@ class CCv2EnvironmentDetailsView(
         setToolbar(toolbar.component)
     }
 
-    private fun initPanel() {
-        add(rootPanel)
+    private fun initPanel(environment: CCv2EnvironmentDto) {
+        removeAll()
 
-        initBuildPanel()
-        initServicesPanel()
-        initDataBackupsPanel()
+        add(rootPanel(environment))
+        installToolbar(environment)
+
+        initBuildPanel(environment)
+        initServicesPanel(environment)
+        initDataBackupsPanel(environment)
     }
 
-    private fun initBuildPanel() {
+    private fun initBuildPanel(environment: CCv2EnvironmentDto) {
         val deployedBuild = environment.deployedBuild
-        if (deployedBuild == null) {
-            CCv2Service.getInstance(project).fetchEnvironmentBuild(subscription, environment,
-                {
-                    showBuild.set(false)
-                    environment.deployedBuild = null
-                    buildPanel.removeAll()
-                },
-                { build ->
-                    environment.deployedBuild = build
-
-                    invokeLater {
-                        showBuild.set(build != null)
-
-                        if (build != null) {
-                            buildPanel.add(buildPanel(build))
-                        }
-                    }
-                }
-            )
-        } else {
+        if (deployedBuild != null) {
             buildPanel.removeAll()
             buildPanel.add(buildPanel(deployedBuild))
+            return
         }
+
+        showBuild.set(false)
+
+        CCv2Service.getInstance(project).fetchEnvironmentBuild(
+            subscription, environment,
+            { build ->
+                environment.deployedBuild = build
+
+                invokeLater {
+                    val panel = if (build != null) buildPanel(build)
+                    else CCv2ViewUtil.noDataPanel("No build found")
+
+                    buildPanel.removeAll()
+                    buildPanel.add(panel)
+                    showBuild.set(true)
+                }
+            }
+        )
     }
 
-    private fun initServicesPanel() {
+    private fun initServicesPanel(environment: CCv2EnvironmentDto) {
         val services = environment.services
-        if (services == null) {
-            CCv2Service.getInstance(project).fetchEnvironmentServices(subscription, environment,
-                {
-                    showServices.set(false)
-                    environment.services = null
-                    servicesPanel.removeAll()
-                },
-                {
-                    environment.services = it
-
-                    invokeLater {
-                        showServices.set(it != null)
-
-                        if (it != null) {
-                            servicesPanel.add(servicesPanel(it))
-                        }
-                    }
-                }
-            )
-        } else {
+        if (services != null) {
             servicesPanel.removeAll()
-            servicesPanel.add(servicesPanel(services))
+            servicesPanel.add(servicesPanel(environment, services))
+            return
         }
+
+        showServices.set(false)
+
+        CCv2Service.getInstance(project).fetchEnvironmentServices(
+            subscription, environment,
+            {
+                environment.services = it
+
+                invokeLater {
+                    val panel = if (it != null) servicesPanel(environment, it)
+                    else CCv2ViewUtil.noDataPanel("No services found")
+
+                    servicesPanel.removeAll()
+                    servicesPanel.add(panel)
+                    showServices.set(true)
+                }
+            }
+        )
     }
 
-    private fun initDataBackupsPanel() {
+    private fun initDataBackupsPanel(environment: CCv2EnvironmentDto) {
         val dataBackups = environment.dataBackups
-        if (dataBackups == null) {
-            CCv2Service.getInstance(project).fetchEnvironmentDataBackups(subscription, environment,
-                {
-                    showDataBackups.set(false)
-                    environment.dataBackups = null
-                    dataBackupsPanel.removeAll()
-                },
-                {
-                    environment.dataBackups = it
-
-                    invokeLater {
-                        showDataBackups.set(it != null)
-
-                        if (it != null) {
-                            dataBackupsPanel.add(dataBackupsPanel(it))
-                        }
-                    }
-                }
-            )
-        } else {
+        if (dataBackups != null) {
             dataBackupsPanel.removeAll()
             dataBackupsPanel.add(dataBackupsPanel(dataBackups))
+            return
         }
+
+        showDataBackups.set(false)
+
+        CCv2Service.getInstance(project).fetchEnvironmentDataBackups(
+            subscription, environment,
+            {
+                environment.dataBackups = it
+
+                invokeLater {
+                    val panel = if (it != null) dataBackupsPanel(it)
+                    else CCv2ViewUtil.noDataPanel("No data backups found")
+
+                    dataBackupsPanel.removeAll()
+                    dataBackupsPanel.add(panel)
+                    showDataBackups.set(true)
+                }
+            }
+        )
     }
 
     private fun buildPanel(build: CCv2BuildDto) = panel {
@@ -241,7 +244,7 @@ class CCv2EnvironmentDetailsView(
             .layout(RowLayout.PARENT_GRID)
     }
 
-    private fun servicesPanel(services: Collection<CCv2ServiceDto>) = panel {
+    private fun servicesPanel(environment: CCv2EnvironmentDto, services: Collection<CCv2ServiceDto>) = panel {
         services.forEach { service ->
             row {
                 panel {
@@ -345,7 +348,7 @@ class CCv2EnvironmentDetailsView(
         }
     }
 
-    private fun rootPanel() = panel {
+    private fun rootPanel(environment: CCv2EnvironmentDto) = panel {
         indent {
             row {
                 val environmentCode = if (environment.name != environment.code) "${environment.code} - ${environment.name}"
@@ -484,7 +487,8 @@ class CCv2EnvironmentDetailsView(
                                         } else {
                                             retrieving = true
 
-                                            CCv2Service.getInstance(project).fetchMediaStoragePublicKey(project, subscription, environment, mediaStorage,
+                                            CCv2Service.getInstance(project).fetchMediaStoragePublicKey(
+                                                project, subscription, environment, mediaStorage,
                                                 {
                                                     publicKeyActionLink.text = "Retrieving..."
                                                 },
