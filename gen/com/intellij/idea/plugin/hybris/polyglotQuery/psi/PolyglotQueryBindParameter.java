@@ -24,9 +24,19 @@
 package com.intellij.idea.plugin.hybris.polyglotQuery.psi;
 
 import java.util.List;
+
+import com.intellij.idea.plugin.hybris.flexibleSearch.psi.FlexibleSearchExpression;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
 public interface PolyglotQueryBindParameter extends PsiElement {
 
+    @Nullable
+    PolyglotQueryCmpOperator getOperator();
+
+    @Nullable
+    String getItemType();
+
+    @NotNull
+    String getValue();
 }
