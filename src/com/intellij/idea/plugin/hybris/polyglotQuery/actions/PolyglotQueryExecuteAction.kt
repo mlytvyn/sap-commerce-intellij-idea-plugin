@@ -21,18 +21,22 @@ import com.intellij.idea.plugin.hybris.actions.ExecuteStatementAction
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.polyglotQuery.PolyglotQueryLanguage
+import com.intellij.idea.plugin.hybris.polyglotQuery.editor.PolyglotQuerySplitEditor
 import com.intellij.idea.plugin.hybris.polyglotQuery.editor.polyglotQuerySplitEditor
 import com.intellij.idea.plugin.hybris.tools.remote.console.impl.HybrisPolyglotQueryConsole
+import com.intellij.idea.plugin.hybris.tools.remote.execution.DefaultExecutionResult
 import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionClient
 import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionContext
 import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.QueryMode
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecutionClient
+import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecutionContext
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.readAction
-import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.ui.AnimatedIcon
 import kotlinx.coroutines.launch
+import org.apache.http.HttpStatus
 
 class PolyglotQueryExecuteAction : ExecuteStatementAction<HybrisPolyglotQueryConsole>(
     PolyglotQueryLanguage,
@@ -54,18 +58,45 @@ class PolyglotQueryExecuteAction : ExecuteStatementAction<HybrisPolyglotQueryCon
         else HybrisIcons.Console.Actions.EXECUTE
     }
 
-    override fun processContent(e: AnActionEvent, content: String, editor: Editor, project: Project): String = e.polyglotQuerySplitEditor()
-        ?.query
-        ?: content
-
     override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
-        val fileEditor = e.polyglotQuerySplitEditor()
+        val fileEditor = e.polyglotQuerySplitEditor() ?: return
+
+        if (fileEditor.inEditorParameters) executeParametrizedQuery(e, project, fileEditor, content)
+        else executeDirectQuery(e, project, fileEditor, content)
+    }
+
+    private fun executeParametrizedQuery(e: AnActionEvent, project: Project, fileEditor: PolyglotQuerySplitEditor, content: String) {
+        val missingParameters = fileEditor.queryParameters?.values
+            ?.filter { it.sqlValue.isBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ", "missing values for [", "]") { it.name }
+
+        if (missingParameters != null) {
+            val result = DefaultExecutionResult(
+                statusCode = HttpStatus.SC_BAD_REQUEST,
+                errorMessage = missingParameters
+            )
+
+            if (fileEditor.inEditorResults) {
+                fileEditor.renderExecutionResult(result)
+            } else {
+                val console = openConsole(project, content) ?: return
+                console.print(fileEditor.queryParameters?.values)
+                console.print(result)
+            }
+            return
+        }
+
+        executeParametrizedGroovyQuery(e, project, fileEditor, content)
+    }
+
+    private fun executeDirectQuery(e: AnActionEvent, project: Project, fileEditor: PolyglotQuerySplitEditor, content: String) {
         val context = FlexibleSearchExecutionContext(
             content = content,
             queryMode = QueryMode.PolyglotQuery
         )
 
-        if (fileEditor?.inEditorResults ?: false) {
+        if (fileEditor.inEditorResults) {
             fileEditor.putUserData(KEY_QUERY_EXECUTING, true)
             fileEditor.showLoader()
 
@@ -81,6 +112,51 @@ class PolyglotQueryExecuteAction : ExecuteStatementAction<HybrisPolyglotQueryCon
             val console = openConsole(project, content) ?: return
 
             FlexibleSearchExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
+                console.print(result)
+            }
+        }
+    }
+
+    private fun executeParametrizedGroovyQuery(e: AnActionEvent, project: Project, fileEditor: PolyglotQuerySplitEditor, content: String) {
+        val queryParameters = fileEditor.queryParameters?.values
+            ?.filter { it.sqlValue.isNotBlank() }
+            ?.joinToString(",\n", "[\n", "\n]") { "${it.name} : ${it.sqlValue}" }
+            ?.takeIf { it.isNotEmpty() }
+            ?: "[:]"
+        val textBlock = "\"\"\""
+        val context = GroovyExecutionContext(
+            content = """
+                            import de.hybris.platform.core.model.ItemModel
+                            import de.hybris.platform.servicelayer.search.FlexibleSearchService
+        
+                            def query = $textBlock$content$textBlock
+                            def params = $queryParameters
+    
+                            println "PK"
+                            flexibleSearchService
+                                .<ItemModel>search(query, params)
+                                .result.forEach { println it.pk }
+                        """.trimIndent()
+        )
+
+        if (fileEditor.inEditorResults) {
+            fileEditor.putUserData(KEY_QUERY_EXECUTING, true)
+            fileEditor.showLoader()
+
+            GroovyExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
+                fileEditor.renderExecutionResult(result)
+                fileEditor.putUserData(KEY_QUERY_EXECUTING, false)
+
+                coroutineScope.launch {
+                    readAction { this@PolyglotQueryExecuteAction.update(e) }
+                }
+            }
+        } else {
+            val console = openConsole(project, content) ?: return
+
+            GroovyExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
+                console.print(fileEditor.queryParameters?.values)
+
                 console.print(result)
             }
         }
