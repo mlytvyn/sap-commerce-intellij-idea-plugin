@@ -16,12 +16,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.intellij.idea.plugin.hybris.flexibleSearch.editor
+package com.intellij.idea.plugin.hybris.polyglotQuery.editor
 
 import com.intellij.database.editor.CsvTableFileEditor
-import com.intellij.idea.plugin.hybris.flexibleSearch.FlexibleSearchLanguage
-import com.intellij.idea.plugin.hybris.flexibleSearch.file.FlexibleSearchFileType
 import com.intellij.idea.plugin.hybris.grid.GridXSVFormatService
+import com.intellij.idea.plugin.hybris.polyglotQuery.PolyglotQueryLanguage
+import com.intellij.idea.plugin.hybris.polyglotQuery.file.PolyglotQueryFileType
 import com.intellij.idea.plugin.hybris.tools.remote.execution.DefaultExecutionResult
 import com.intellij.idea.plugin.hybris.ui.Dsl
 import com.intellij.openapi.application.edtWriteAction
@@ -41,13 +41,17 @@ import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.awt.Dimension
+import java.lang.Boolean
 import javax.swing.JEditorPane
 import javax.swing.ScrollPaneConstants
+import kotlin.apply
+import kotlin.let
+import kotlin.plus
 
 @Service(Service.Level.PROJECT)
-class FlexibleSearchInEditorResultsView(private val project: Project, private val coroutineScope: CoroutineScope) {
+class PolyglotQueryInEditorResultsView(private val project: Project, private val coroutineScope: CoroutineScope) {
 
-    fun renderRunningExecution(fileEditor: FlexibleSearchSplitEditor) {
+    fun renderRunningExecution(fileEditor: PolyglotQuerySplitEditor) {
         if (fileEditor.inEditorResultsView == null) return
 
         fileEditor.inEditorResultsView = panel {
@@ -69,7 +73,7 @@ class FlexibleSearchInEditorResultsView(private val project: Project, private va
         }.apply { border = JBUI.Borders.empty(5, 16, 10, 16) }
     }
 
-    fun renderExecutionResult(fileEditor: FlexibleSearchSplitEditor, result: DefaultExecutionResult) {
+    fun renderExecutionResult(fileEditor: PolyglotQuerySplitEditor, result: DefaultExecutionResult) {
         if (result.hasError) {
             fileEditor.inEditorResultsView = renderInEditorError(result)
         } else {
@@ -77,18 +81,18 @@ class FlexibleSearchInEditorResultsView(private val project: Project, private va
         }
     }
 
-    private fun renderInEditorResults(fileEditor: FlexibleSearchSplitEditor, result: DefaultExecutionResult) {
+    private fun renderInEditorResults(fileEditor: PolyglotQuerySplitEditor, result: DefaultExecutionResult) {
         coroutineScope.launch {
             if (project.isDisposed) return@launch
             val output = result.output ?: return@launch
 
             val lvf = LightVirtualFile(
-                fileEditor.file?.name + ".${FlexibleSearchFileType.defaultExtension}.result.csv",
+                fileEditor.file?.name + ".${PolyglotQueryFileType.defaultExtension}.result.csv",
                 PlainTextFileType.INSTANCE,
                 output
             )
 
-            val format = GridXSVFormatService.getInstance(project).getFormat(FlexibleSearchLanguage)
+            val format = GridXSVFormatService.getInstance(project).getFormat(PolyglotQueryLanguage)
 
             edtWriteAction {
                 val editor = CsvTableFileEditor(project, lvf, format);
@@ -102,7 +106,7 @@ class FlexibleSearchInEditorResultsView(private val project: Project, private va
             row {
                 cell(
                     InlineBanner(
-                        "An error was encountered while processing the FlexibleSearch query.",
+                        "An error was encountered while processing the Polyglot Query.",
                         EditorNotificationPanel.Status.Error,
                     ).showCloseButton(false)
                 )
@@ -121,7 +125,7 @@ class FlexibleSearchInEditorResultsView(private val project: Project, private va
                             isEditable = false
                             isOpaque = false
                             background = null
-                            putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, java.lang.Boolean.TRUE)
+                            putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE)
                         }
                     )
                         .align(Align.FILL)
@@ -137,6 +141,6 @@ class FlexibleSearchInEditorResultsView(private val project: Project, private va
         }
 
     companion object {
-        fun getInstance(project: Project): FlexibleSearchInEditorResultsView = project.service()
+        fun getInstance(project: Project): PolyglotQueryInEditorResultsView = project.service()
     }
 }

@@ -15,29 +15,34 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
-package com.intellij.idea.plugin.hybris.flexibleSearch.actions
+package com.intellij.idea.plugin.hybris.polyglotQuery.actions
 
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
-import com.intellij.idea.plugin.hybris.flexibleSearch.editor.flexibleSearchSplitEditor
+import com.intellij.idea.plugin.hybris.polyglotQuery.editor.polyglotQuerySplitEditor
+import com.intellij.idea.plugin.hybris.project.utils.Plugin
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ToggleAction
-import com.intellij.openapi.project.DumbAware
 
-class FlexibleSearchToggleParametersEditorAction : ToggleAction(
-    message("hybris.fxs.actions.query_parameters"),
-    message("hybris.fxs.actions.query_parameters.description"),
-    HybrisIcons.Actions.TOGGLE_PARAMETERS_EDITOR
-), DumbAware {
+class PolyglotQueryToggleInEditorResultsAction : ToggleAction(
+    message("hybris.actions.in_editor_results"),
+    message("hybris.actions.in_editor_results.description"),
+    HybrisIcons.Actions.TOGGLE_IN_EDITOR_RESULTS
+) {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
-    override fun isSelected(e: AnActionEvent): Boolean = e.flexibleSearchSplitEditor()?.inEditorParameters
+    override fun isSelected(e: AnActionEvent): Boolean = e.polyglotQuerySplitEditor()?.inEditorResults
         ?: false
 
     override fun setSelected(e: AnActionEvent, state: Boolean) {
-        e.flexibleSearchSplitEditor()?.inEditorParameters = state
+        e.polyglotQuerySplitEditor()?.inEditorResults = state
     }
+
+    override fun update(e: AnActionEvent) {
+        super.update(e)
+        e.presentation.isVisible = e.presentation.isVisible && Plugin.GRID.isActive()
+    }
+
 }

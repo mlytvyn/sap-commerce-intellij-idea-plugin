@@ -16,11 +16,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.intellij.idea.plugin.hybris.flexibleSearch.editor
+package com.intellij.idea.plugin.hybris.polyglotQuery.editor
 
-import com.intellij.idea.plugin.hybris.flexibleSearch.editor.FlexibleSearchSplitEditor.Companion.KEY_PARAMETERS
-import com.intellij.idea.plugin.hybris.flexibleSearch.psi.FlexibleSearchBindParameter
-import com.intellij.idea.plugin.hybris.flexibleSearch.psi.FlexibleSearchTypes
+import com.intellij.idea.plugin.hybris.polyglotQuery.psi.PolyglotQueryBindParameter
 import com.intellij.idea.plugin.hybris.system.type.meta.TSMetaModelStateService
 import com.intellij.idea.plugin.hybris.ui.Dsl
 import com.intellij.openapi.Disposable
@@ -37,7 +35,6 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.InlineBanner
 import com.intellij.ui.UIBundle
-import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.dsl.builder.*
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.util.asSafely
@@ -52,15 +49,15 @@ import java.util.*
 import javax.swing.LayoutFocusTraversalPolicy
 
 @Service(Service.Level.PROJECT)
-class FlexibleSearchInEditorParametersView(private val project: Project, private val coroutineScope: CoroutineScope) {
+class PolyglotQueryInEditorParametersView(private val project: Project, private val coroutineScope: CoroutineScope) {
 
-    fun renderParameters(fileEditor: FlexibleSearchSplitEditor) {
+    fun renderParameters(fileEditor: PolyglotQuerySplitEditor) {
         coroutineScope.launch {
             if (project.isDisposed) return@launch
 
             fileEditor.queryParametersDisposable?.let { Disposer.dispose(it) }
 
-            val panel = if (!isTypeSystemInitialized()) renderTypeSystemInitializationPanel()
+            val panel = if (!isTypeSystemInitialized(project)) renderTypeSystemInitializationPanel()
             else {
                 val queryParameters = collectQueryParameters(fileEditor)
                 renderParametersPanel(queryParameters, fileEditor)
@@ -81,8 +78,8 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }
 
     private fun renderParametersPanel(
-        queryParameters: Map<String, FlexibleSearchQueryParameter>,
-        fileEditor: FlexibleSearchSplitEditor,
+        queryParameters: Map<String, PolyglotQueryParameter>,
+        fileEditor: PolyglotQuerySplitEditor,
     ): DialogPanel {
         val parentDisposable = Disposer.newDisposable().apply {
             fileEditor.queryParametersDisposable = this
@@ -132,7 +129,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
         row {
             cell(
                 InlineBanner(
-                    "<p style='width: 100%'>FlexibleSearch query doesn't have parameters</p>",
+                    "<p style='width: 100%'>Polyglot Query doesn't have parameters</p>",
                     EditorNotificationPanel.Status.Warning
                 ).showCloseButton(false)
             )
@@ -142,8 +139,8 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }.customize(UnscaledGaps(16, 16, 16, 16))
 
     private fun Panel.parametersPanel(
-        queryParameters: Map<String, FlexibleSearchQueryParameter>,
-        fileEditor: FlexibleSearchSplitEditor,
+        queryParameters: Map<String, PolyglotQueryParameter>,
+        fileEditor: PolyglotQuerySplitEditor,
         parentDisposable: Disposable
     ) = panel {
         group("Parameters") {
@@ -176,7 +173,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
                         Date::class -> cell(
                             DatePicker(
                                 parameter.rawValue?.asSafely<Date>(),
-                                SimpleDateFormat(FlexibleSearchQueryParameter.DATE_FORMAT)
+                                SimpleDateFormat(PolyglotQueryParameter.Companion.DATE_FORMAT)
                             )
                         )
                             .label("${parameter.displayName}:")
@@ -194,19 +191,13 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
                                 }
                             }
 
-                        String::class -> when {
-                            parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> multivalueTextArea()
-                            else -> textField()
-                        }
+                        String::class -> textField()
                             .label("${parameter.displayName}:")
                             .align(AlignX.FILL)
                             .text(parameter.rawValue?.asSafely<String>() ?: "")
                             .onChanged { applyValue(fileEditor, parameter, it.text) }
 
-                        else -> when {
-                            parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> multivalueTextArea()
-                            else -> textField()
-                        }
+                        else -> textField()
                             .label("${parameter.displayName}:")
                             .align(AlignX.FILL)
                             .text(parameter.sqlValue)
@@ -219,45 +210,39 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }
 
     private fun Row.numberTextField(
-        parameter: FlexibleSearchQueryParameter,
-        fileEditor: FlexibleSearchSplitEditor,
+        parameter: PolyglotQueryParameter,
+        fileEditor: PolyglotQuerySplitEditor,
         from: String, to: String,
         numberType: String,
         validation: (String) -> Boolean
-    ) = when {
-        parameter.operand == FlexibleSearchTypes.IN_EXPRESSION -> multivalueTextArea()
-        else -> textField().validationOnInput {
+    ) = textField()
+        .label("${parameter.displayName}:")
+        .validationOnInput {
             if (validation.invoke(it.text)) error(UIBundle.message("please.enter.a.number.from.0.to.1", from, "$to ($numberType)"))
             else null
         }
-    }
-        .label("${parameter.displayName}:")
         .align(AlignX.FILL)
         .text(parameter.rawValue?.asSafely<String>() ?: "")
         .onChanged { applyValue(fileEditor, parameter, it.text) }
 
-    private fun Row.multivalueTextArea(): Cell<JBTextArea> = textArea()
-        .rows(3)
-        .comment("Use new line as a value separator.")
-
-    private suspend fun collectQueryParameters(fileEditor: FlexibleSearchSplitEditor): Map<String, FlexibleSearchQueryParameter> {
+    private suspend fun collectQueryParameters(fileEditor: PolyglotQuerySplitEditor): Map<String, PolyglotQueryParameter> {
         val currentQueryParameters = fileEditor.queryParameters
             ?: emptyMap()
 
         return readAction {
             PsiDocumentManager.getInstance(project).getPsiFile(fileEditor.editor.document)
-                ?.let { PsiTreeUtil.findChildrenOfType(it, FlexibleSearchBindParameter::class.java) }
-                ?.map { FlexibleSearchQueryParameter.of(it, currentQueryParameters) }
+                ?.let { PsiTreeUtil.findChildrenOfType(it, PolyglotQueryBindParameter::class.java) }
+                ?.map { PolyglotQueryParameter.of(it, currentQueryParameters) }
                 ?.distinctBy { it.name }
                 ?.associateBy { it.name }
                 ?: emptyMap()
         }
             .also {
-                fileEditor.putUserData(KEY_PARAMETERS, it)
+                fileEditor.putUserData(PolyglotQuerySplitEditor.KEY_PARAMETERS, it)
             }
     }
 
-    private fun applyValue(fileEditor: FlexibleSearchSplitEditor, parameter: FlexibleSearchQueryParameter, newRawValue: Any?) {
+    private fun applyValue(fileEditor: PolyglotQuerySplitEditor, parameter: PolyglotQueryParameter, newRawValue: Any?) {
         val originalRawValue = parameter.rawValue
 
         parameter.rawValue = newRawValue
@@ -267,11 +252,11 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
         }
     }
 
-    private fun isTypeSystemInitialized(): Boolean = !project.isDisposed
+    private fun isTypeSystemInitialized(project: Project): Boolean = !project.isDisposed
         && !DumbService.isDumb(project)
         && TSMetaModelStateService.getInstance(project).initialized()
 
     companion object {
-        fun getInstance(project: Project): FlexibleSearchInEditorParametersView = project.service()
+        fun getInstance(project: Project): PolyglotQueryInEditorParametersView = project.service()
     }
 }
