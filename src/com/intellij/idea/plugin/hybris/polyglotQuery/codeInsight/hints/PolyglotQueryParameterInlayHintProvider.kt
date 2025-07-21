@@ -38,13 +38,13 @@ class PolyglotQueryParameterInlayHintProvider : InlayHintsProvider {
             ?.let { PolyglotQueryInlayHintsCollector(it) }
     }
 
-    private class PolyglotQueryInlayHintsCollector(private val textEditor: PolyglotQuerySplitEditor) : SharedBypassCollector {
+    private class PolyglotQueryInlayHintsCollector(private val splitEditor: PolyglotQuerySplitEditor) : SharedBypassCollector {
         override fun collectFromElement(element: PsiElement, sink: InlayTreeSink) {
             if (!element.isValid || element.project.isDefault) return
             if (element !is PolyglotQueryBindParameter) return
 
-            textEditor.takeIf { it.inEditorParameters }
-                ?.queryParameters
+            splitEditor.takeIf { it.inEditorParameters }
+                ?.virtualParameters
                 ?.get(element.value)
                 ?.takeIf { it.presentationValue.isNotBlank() }
                 ?.let {

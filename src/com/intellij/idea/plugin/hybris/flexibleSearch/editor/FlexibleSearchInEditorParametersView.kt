@@ -57,7 +57,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
         coroutineScope.launch {
             if (project.isDisposed) return@launch
 
-            fileEditor.queryParametersDisposable?.let { Disposer.dispose(it) }
+            fileEditor.virtualParametersDisposable?.let { Disposer.dispose(it) }
 
             val panel = if (!isTypeSystemInitialized()) renderTypeSystemInitializationPanel()
             else {
@@ -80,11 +80,11 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }
 
     private fun renderParametersPanel(
-        queryParameters: Map<String, FlexibleSearchQueryParameter>,
+        queryParameters: Map<String, FlexibleSearchVirtualParameter>,
         fileEditor: FlexibleSearchSplitEditor,
     ): DialogPanel {
         val parentDisposable = Disposer.newDisposable().apply {
-            fileEditor.queryParametersDisposable = this
+            fileEditor.virtualParametersDisposable = this
             Disposer.register(fileEditor.textEditor, this)
         }
 
@@ -141,7 +141,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }.customize(UnscaledGaps(16, 16, 16, 16))
 
     private fun Panel.parametersPanel(
-        queryParameters: Map<String, FlexibleSearchQueryParameter>,
+        queryParameters: Map<String, FlexibleSearchVirtualParameter>,
         fileEditor: FlexibleSearchSplitEditor,
         parentDisposable: Disposable
     ) = panel {
@@ -175,7 +175,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
                         Date::class -> cell(
                             DatePicker(
                                 parameter.rawValue?.asSafely<Date>(),
-                                SimpleDateFormat(FlexibleSearchQueryParameter.DATE_FORMAT)
+                                SimpleDateFormat(FlexibleSearchVirtualParameter.DATE_FORMAT)
                             )
                         )
                             .label("${parameter.displayName}:")
@@ -218,7 +218,7 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
     }
 
     private fun Row.numberTextField(
-        parameter: FlexibleSearchQueryParameter,
+        parameter: FlexibleSearchVirtualParameter,
         fileEditor: FlexibleSearchSplitEditor,
         from: String, to: String,
         numberType: String,
@@ -239,24 +239,24 @@ class FlexibleSearchInEditorParametersView(private val project: Project, private
         .rows(3)
         .comment("Use new line as a value separator.")
 
-    private suspend fun collectQueryParameters(fileEditor: FlexibleSearchSplitEditor): Map<String, FlexibleSearchQueryParameter> {
-        val currentQueryParameters = fileEditor.queryParameters
+    private suspend fun collectQueryParameters(fileEditor: FlexibleSearchSplitEditor): Map<String, FlexibleSearchVirtualParameter> {
+        val currentQueryParameters = fileEditor.virtualParameters
             ?: emptyMap()
 
         return readAction {
             PsiDocumentManager.getInstance(project).getPsiFile(fileEditor.editor.document)
                 ?.let { PsiTreeUtil.findChildrenOfType(it, FlexibleSearchBindParameter::class.java) }
-                ?.map { FlexibleSearchQueryParameter.of(it, currentQueryParameters) }
+                ?.map { FlexibleSearchVirtualParameter.of(it, currentQueryParameters) }
                 ?.distinctBy { it.name }
                 ?.associateBy { it.name }
                 ?: emptyMap()
         }
             .also {
-                fileEditor.queryParameters = it
+                fileEditor.virtualParameters = it
             }
     }
 
-    private fun applyValue(fileEditor: FlexibleSearchSplitEditor, parameter: FlexibleSearchQueryParameter, newRawValue: Any?) {
+    private fun applyValue(fileEditor: FlexibleSearchSplitEditor, parameter: FlexibleSearchVirtualParameter, newRawValue: Any?) {
         val originalRawValue = parameter.rawValue
 
         parameter.rawValue = newRawValue

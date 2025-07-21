@@ -55,7 +55,7 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
     companion object {
         @Serial
         private const val serialVersionUID: Long = -3770395176190649196L
-        private val KEY_PARAMETERS = Key.create<Map<String, FlexibleSearchQueryParameter>>("flexibleSearch.parameters.key")
+        private val KEY_PARAMETERS = Key.create<Map<String, FlexibleSearchVirtualParameter>>("flexibleSearch.parameters.key")
         private val KEY_IN_EDITOR_RESULTS = Key.create<Boolean>("flexibleSearch.in_editor_results.key")
     }
 
@@ -65,8 +65,8 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
             if (state) {
                 FlexibleSearchInEditorParametersView.getInstance(project).renderParameters(this)
             } else {
-                queryParametersDisposable?.apply { Disposer.dispose(this) }
-                queryParametersDisposable = null
+                virtualParametersDisposable?.apply { Disposer.dispose(this) }
+                virtualParametersDisposable = null
                 inEditorParametersView = null
             }
 
@@ -76,17 +76,17 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
             reparseTextEditor()
         }
 
-    var queryParameters: Map<String, FlexibleSearchQueryParameter>?
+    var virtualParameters: Map<String, FlexibleSearchVirtualParameter>?
         get() = getUserData(KEY_PARAMETERS)
         set(value) = putUserData(KEY_PARAMETERS, value)
 
-    val query: String
-        get() = queryParameters
+    val virtualText: String
+        get() = virtualParameters
             ?.values
             ?.sortedByDescending { it.name.length }
-            ?.let { properties ->
+            ?.let { parameters ->
                 var updatedContent = getText()
-                properties.forEach {
+                parameters.forEach {
                     updatedContent = updatedContent.replace("?${it.name}", it.sqlValue)
                 }
                 return@let updatedContent
@@ -112,7 +112,7 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
             horizontalSplitter.secondComponent = view
         }
 
-    internal var queryParametersDisposable: Disposable? = null
+    internal var virtualParametersDisposable: Disposable? = null
 
     private var renderParametersJob: Job? = null
     private var reparseTextEditorJob: Job? = null
