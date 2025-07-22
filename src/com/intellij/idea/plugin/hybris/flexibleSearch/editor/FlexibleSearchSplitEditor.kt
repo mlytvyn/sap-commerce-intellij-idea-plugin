@@ -100,7 +100,7 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
             verticalSplitter.secondComponent?.isVisible = state
         }
 
-    internal var inEditorResultsView: JComponent?
+    private var inEditorResultsView: JComponent?
         get() = verticalSplitter.secondComponent
         set(view) {
             verticalSplitter.secondComponent = view
@@ -148,11 +148,19 @@ class FlexibleSearchSplitEditor(internal val textEditor: TextEditor, private val
         }
     }
 
-    fun renderExecutionResult(result: DefaultExecutionResult) = FlexibleSearchInEditorResultsView.getInstance(project)
-        .renderExecutionResult(this, result)
+    fun renderExecutionResult(result: DefaultExecutionResult) = FlexibleSearchInEditorResultsView.getInstance(project).resultView(this, result) { coroutineScope, view ->
+        coroutineScope.launch {
+            edtWriteAction {
+                inEditorResultsView = view
+            }
+        }
+    }
 
-    fun showLoader() = FlexibleSearchInEditorResultsView.getInstance(project)
-        .renderRunningExecution(this)
+    fun showLoader() {
+        if (inEditorResultsView == null) return
+
+        inEditorResultsView = FlexibleSearchInEditorResultsView.getInstance(project).executingView()
+    }
 
     fun refreshParameters(delayMs: Duration = 500.milliseconds) {
         renderParametersJob?.cancel()
