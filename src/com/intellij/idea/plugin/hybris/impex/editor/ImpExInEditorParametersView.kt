@@ -53,9 +53,9 @@ class ImpExInEditorParametersView(private val project: Project, private val coro
 
             fileEditor.virtualParametersDisposable?.let { Disposer.dispose(it) }
 
-            val queryParameters = collectQueryParameters(fileEditor)
-            fileEditor.virtualParameters = collectQueryParameters(fileEditor)
-            val panel = renderParametersPanel(queryParameters, fileEditor)
+            val virtualParameters = collectVirtualParameters(fileEditor)
+            fileEditor.virtualParameters = collectVirtualParameters(fileEditor)
+            val panel = renderParametersPanel(virtualParameters, fileEditor)
 
             edtWriteAction {
                 fileEditor.inEditorParametersView = panel
@@ -64,7 +64,7 @@ class ImpExInEditorParametersView(private val project: Project, private val coro
     }
 
     private fun renderParametersPanel(
-        queryParameters: Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter>,
+        virtualParameters: Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter>,
         fileEditor: ImpExSplitEditor,
     ): DialogPanel {
         val parentDisposable = Disposer.newDisposable().apply {
@@ -75,10 +75,10 @@ class ImpExInEditorParametersView(private val project: Project, private val coro
         return panel {
             notificationPanel()
 
-            if (queryParameters.isEmpty()) {
+            if (virtualParameters.isEmpty()) {
                 notResultsPanel()
             } else {
-                parametersPanel(queryParameters, fileEditor)
+                parametersPanel(virtualParameters, fileEditor)
             }
         }
             .apply {
@@ -125,16 +125,16 @@ class ImpExInEditorParametersView(private val project: Project, private val coro
     }.customize(UnscaledGaps(16, 16, 16, 16))
 
     private fun Panel.parametersPanel(
-        queryParameters: Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter>,
+        virtualParameters: Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter>,
         fileEditor: ImpExSplitEditor
     ) = panel {
         group("Macro Declarations") {
-            queryParameters
+            virtualParameters
                 .forEach { (pointer, parameter) ->
                     row {
                         expandableTextField(
                             { text -> text.split("\n").toMutableList() },
-                            { strings -> strings.joinToString(" ")}
+                            { strings -> strings.joinToString(" ") }
                         )
                             .label("${parameter.displayName}:")
                             .align(AlignX.FILL)
@@ -152,19 +152,19 @@ class ImpExInEditorParametersView(private val project: Project, private val coro
         }
     }
 
-    private suspend fun collectQueryParameters(fileEditor: ImpExSplitEditor): Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter> {
-        val currentParameters = fileEditor.virtualParameters
+    private suspend fun collectVirtualParameters(fileEditor: ImpExSplitEditor): Map<SmartPsiElementPointer<ImpexMacroDeclaration>, ImpExVirtualParameter> {
+        val currentVirtualParameters = fileEditor.virtualParameters
             ?: emptyMap()
 
         return readAction {
             PsiDocumentManager.getInstance(project).getPsiFile(fileEditor.editor.document)
                 ?.let { PsiTreeUtil.findChildrenOfType(it, ImpexMacroDeclaration::class.java) }
                 ?.associate {
-                    val pointer = SmartPointerManager.createPointer(it)
-                    val virtualParameter = currentParameters[pointer]
-                        ?: ImpExVirtualParameter.of(it)
-
-                    pointer to virtualParameter
+                    currentVirtualParameters
+                        .filter { (key, _) -> key.element?.isEquivalentTo(it) ?: false }
+                        .map { (key, value) -> key to value }
+                        .firstOrNull()
+                        ?: (SmartPointerManager.createPointer(it) to ImpExVirtualParameter.of(it))
                 }
                 ?: emptyMap()
         }
