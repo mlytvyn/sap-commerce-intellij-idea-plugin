@@ -16,13 +16,15 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.tools.remote.execution
+package com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch
 
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
+import com.intellij.idea.plugin.hybris.tools.remote.execution.ConsoleAwareExecutionResult
+import com.intellij.idea.plugin.hybris.tools.remote.execution.DefaultExecutionResult
 import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.ReplicaContext
 import org.apache.http.HttpStatus
 
-data class DefaultExecutionResult(
+data class FlexibleSearchExecutionResult(
     override val remoteConnectionType: RemoteConnectionType = RemoteConnectionType.Hybris,
     val statusCode: Int = HttpStatus.SC_OK,
     override val result: String? = null,
@@ -30,4 +32,20 @@ data class DefaultExecutionResult(
     override val replicaContext: ReplicaContext? = null,
     override val errorMessage: String? = null,
     override val errorDetailMessage: String? = null,
-) : ConsoleAwareExecutionResult
+) : ConsoleAwareExecutionResult {
+
+    val hasDataRows: Boolean
+        get() = output?.trim()?.contains("\n") ?: false
+
+    companion object {
+        fun from(result: DefaultExecutionResult) = FlexibleSearchExecutionResult(
+            remoteConnectionType = result.remoteConnectionType,
+            statusCode = result.statusCode,
+            result = result.result,
+            output = result.output,
+            replicaContext = result.replicaContext,
+            errorMessage = result.errorMessage,
+            errorDetailMessage = result.errorDetailMessage,
+        )
+    }
+}

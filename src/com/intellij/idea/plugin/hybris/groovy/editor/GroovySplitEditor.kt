@@ -78,7 +78,7 @@ class GroovySplitEditor(internal val textEditor: TextEditor, private val project
         add(verticalSplitter, BorderLayout.CENTER)
     }
 
-    fun renderExecutionResult(result: DefaultExecutionResult) = GroovyInEditorResultsView.getInstance(project).resultView(this, result) { coroutineScope, view ->
+    fun renderExecutionResults(results: Collection<DefaultExecutionResult>) = GroovyInEditorResultsView.getInstance(project).resultView(this, results) { coroutineScope, view ->
         coroutineScope.launch {
             edtWriteAction {
                 inEditorResultsView = view
@@ -86,11 +86,8 @@ class GroovySplitEditor(internal val textEditor: TextEditor, private val project
         }
     }
 
-    fun showLoader() {
-        if (inEditorResultsView == null) return
-
-        inEditorResultsView = GroovyInEditorResultsView.getInstance(project)
-            .executingView()
+    fun showLoader(richMessage: String) {
+        inEditorResultsView = GroovyInEditorResultsView.getInstance(project).executingView(richMessage)
     }
 
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {

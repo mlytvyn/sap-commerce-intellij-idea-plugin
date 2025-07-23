@@ -47,35 +47,51 @@ class GroovyExecuteAction : ExecuteStatementAction<HybrisGroovyConsole, GroovySp
 
     override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
         val fileEditor = fileEditor(e)
+        val fileName = e.getData(CommonDataKeys.PSI_FILE)?.name
+        val prefix = fileName ?: "script"
+
         val transactionMode = DeveloperSettingsComponent.getInstance(project).state.groovySettings.txMode
         val executionClient = GroovyExecutionClient.getInstance(project)
         val contexts = executionClient.connectionContext.replicaContexts
             .map {
                 GroovyExecutionContext(
+                    executionTitle = "$prefix | ${it.replicaId} | ${GroovyExecutionContext.DEFAULT_TITLE}",
                     content = content,
                     transactionMode = transactionMode,
                     replicaContext = it
                 )
             }
             .takeIf { it.isNotEmpty() }
-            ?: listOf(GroovyExecutionContext(content = content, transactionMode = transactionMode))
+            ?: listOf(
+                GroovyExecutionContext(
+                    executionTitle = "$prefix | ${GroovyExecutionContext.DEFAULT_TITLE}",
+                    content = content,
+                    transactionMode = transactionMode
+                )
+            )
 
         if (fileEditor?.inEditorResults ?: false) {
             fileEditor.putUserData(KEY_QUERY_EXECUTING, true)
-            fileEditor.showLoader()
+            fileEditor.showLoader("$prefix | 1 of ${contexts.size} | ${GroovyExecutionContext.DEFAULT_TITLE}")
+            var completed = 1
 
             executionClient.execute(
                 contexts = contexts,
                 resultCallback = { _, result ->
-                    if (contexts.size == 1) fileEditor.renderExecutionResult(result)
+                    completed++
+                    fileEditor.showLoader("$prefix | $completed of ${contexts.size} | ${GroovyExecutionContext.DEFAULT_TITLE}")
                 },
                 resultsCallback = { coroutineScope, results ->
-                    if (contexts.size > 1) fileEditor.renderExecutionResult(
+                    fileEditor.renderExecutionResults(results)
+                    fileEditor.putUserData(KEY_QUERY_EXECUTING, false)
+                },
+                onError = { _, e ->
+                    fileEditor.renderExecutionResults(listOf(
                         DefaultExecutionResult(
-                            errorMessage = "Multiple results are not yet supported in the 'In-Editor Results' mode.",
-                            errorDetailMessage = "Please use console output in case of multiple results."
+                            errorMessage = e.message,
+                            errorDetailMessage = e.stackTraceToString()
                         )
-                    )
+                    ))
                     fileEditor.putUserData(KEY_QUERY_EXECUTING, false)
                 }
             )
@@ -85,7 +101,7 @@ class GroovyExecuteAction : ExecuteStatementAction<HybrisGroovyConsole, GroovySp
             executionClient.execute(
                 contexts = contexts,
                 resultCallback = { coroutineScope, result -> console.print(result, false) },
-                resultsCallback = { coroutineScope, results -> console.afterExecution() }
+                resultsCallback = { coroutineScope, results -> console.afterExecution() },
             )
         }
     }
