@@ -19,7 +19,6 @@
 package com.intellij.idea.plugin.hybris.tools.logging
 
 import com.intellij.idea.plugin.hybris.notifications.Notifications
-import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionService
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
 import com.intellij.idea.plugin.hybris.tools.remote.execution.TransactionMode
@@ -32,8 +31,6 @@ import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Key
-import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.psi.PsiDocumentManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -49,15 +46,17 @@ private const val FETCH_LOGGERS_STATE_GROOVY_SCRIPT = """
 """
 
 @Service(Service.Level.PROJECT)
-class CxLoggerAccess(private val project: Project, private val coroutineScope: CoroutineScope) : UserDataHolderBase() {
+class CxLoggerAccess(private val project: Project, private val coroutineScope: CoroutineScope) {
     private var fetching: Boolean = false
-    val loggers
-        get() = getUserData(KEY_LOGGERS_STATE)
+    val loggersCache = CxLoggersStorage()
 
     val canRefresh: Boolean
         get() = !fetching
 
-    fun logger(loggerIdentifier: String) = loggers?.get(loggerIdentifier)
+    val cacheInitialized: Boolean
+        get() = loggersCache.initialized
+
+    fun logger(loggerIdentifier: String): CxLoggerModel? = if (!cacheInitialized) null else loggersCache.get(loggerIdentifier)
 
     fun setLogger(loggerName: String, logLevel: LogLevel) {
         val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
@@ -99,9 +98,9 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         GroovyExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
             val loggers = result.result
                 ?.split("\n")
-                ?.map { it -> it.split(" | ") }
+                ?.map { it.split(" | ") }
                 ?.filter { it.size == 3 }
-                ?.map { CxLoggerModel(it[0], it[2], if (it.size == 3) it[1] else null) }
+                ?.map { CxLoggerModel.of(it[0], it[2], if (it.size == 3) it[1] else null) }
                 ?.distinctBy { it.name }
                 ?.associateBy { it.name }
 
@@ -115,12 +114,12 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
                 "<p>Server: ${server.shortenConnectionName()}</p>"
             }
         }
-
     }
 
     private fun updateCache(loggers: Map<String, CxLoggerModel>?) {
         coroutineScope.launch {
-            putUserData(KEY_LOGGERS_STATE, loggers)
+
+            loggersCache.update(loggers ?: emptyMap())
 
             edtWriteAction {
                 PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)
@@ -130,13 +129,6 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         }
     }
 
-    private fun notify(type: NotificationType, title: String, server: RemoteConnectionSettings) {
-        Notifications
-            .create(type, title, "<p>Server: ${server.shortenConnectionName()}</p>")
-            .hideAfter(5)
-            .notify(project)
-    }
-
     private fun notify(type: NotificationType, title: String, contentProvider: () -> String) = Notifications
         .create(type, title, contentProvider.invoke())
         .hideAfter(5)
@@ -144,6 +136,5 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
 
     companion object {
         fun getInstance(project: Project): CxLoggerAccess = project.service()
-        private val KEY_LOGGERS_STATE = Key.create<Map<String, CxLoggerModel>>("flexibleSearch.parameters.key")
     }
 }

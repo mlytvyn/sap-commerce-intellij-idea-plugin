@@ -18,4 +18,30 @@
 
 package com.intellij.idea.plugin.hybris.tools.logging
 
-data class CxLoggerModel(val name: String, val effectiveLevel: String, val parentName: String?)
+data class CxLoggerModel(
+    val name: String,
+    val effectiveLevel: String,
+    val parentName: String?,
+    val inherited: Boolean
+) {
+    companion object {
+
+        const val ROOT_LOGGER_NAME = "root"
+
+        fun of(name: String, effectiveLevel: String, parentName: String? = null, inherited: Boolean = false): CxLoggerModel = CxLoggerModel(
+            name = name,
+            effectiveLevel = effectiveLevel,
+            parentName = if (name == ROOT_LOGGER_NAME) null else parentName,
+            inherited = inherited
+        )
+
+        fun inherited(name: String, parentLogger: CxLoggerModel): CxLoggerModel = of(
+            name = name,
+            effectiveLevel = parentLogger.effectiveLevel,
+            parentName = parentLogger.name,
+            inherited = true
+        )
+
+        fun root() = of(name = ROOT_LOGGER_NAME, effectiveLevel = "undefined")
+    }
+}
