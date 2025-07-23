@@ -75,7 +75,7 @@ class LoggingExecutionClient(project: Project, coroutineScope: CoroutineScope) :
                     val effectiveLevel = it.jsonObject["effectiveLevel"]?.jsonObject["standardLevel"]?.jsonPrimitive?.content ?: return@mapNotNull null
                     val parentName = it.jsonObject["parentName"]?.jsonPrimitive?.content
 
-                    CxLoggerModel(name, effectiveLevel, parentName)
+                    CxLoggerModel.of(name, effectiveLevel, parentName)
                 }
 
             return LoggingExecutionResult(
