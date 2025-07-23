@@ -25,6 +25,7 @@ import com.intellij.idea.plugin.hybris.actions.ExecuteStatementAction
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.tools.remote.console.impl.HybrisImpexConsole
 import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ExecutionMode
+import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExDialect
 import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionClient
 import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionContext
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -47,11 +48,12 @@ class AclValidateAction : ExecuteStatementAction<HybrisImpexConsole, AclSplitEdi
         val context = ImpExExecutionContext(
             content = content,
             executionMode = ExecutionMode.VALIDATE,
+            dialect = ImpExDialect.ACL
         )
 
         if (fileEditor?.inEditorResults ?: false) {
             fileEditor.putUserData(KEY_QUERY_EXECUTING, true)
-            fileEditor.showLoader()
+            fileEditor.showLoader(context)
 
             ImpExExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
                 fileEditor.renderExecutionResult(result)
