@@ -15,17 +15,16 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.intellij.idea.plugin.hybris.polyglotQuery.actions
+package com.intellij.idea.plugin.hybris.groovy.actions
 
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
-import com.intellij.idea.plugin.hybris.polyglotQuery.editor.polyglotQuerySplitEditor
-import com.intellij.idea.plugin.hybris.project.utils.Plugin
+import com.intellij.idea.plugin.hybris.groovy.editor.groovySplitEditor
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ToggleAction
 
-class PolyglotQueryToggleInEditorResultsAction : ToggleAction(
+class GroovyToggleInEditorResultsAction : ToggleAction(
     message("hybris.actions.in_editor.results"),
     message("hybris.actions.in_editor.results.description"),
     HybrisIcons.Actions.TOGGLE_IN_EDITOR_RESULTS
@@ -33,16 +32,11 @@ class PolyglotQueryToggleInEditorResultsAction : ToggleAction(
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
-    override fun isSelected(e: AnActionEvent): Boolean = e.polyglotQuerySplitEditor()?.inEditorResults
+    override fun isSelected(e: AnActionEvent): Boolean = e.groovySplitEditor()?.inEditorResults
         ?: false
 
     override fun setSelected(e: AnActionEvent, state: Boolean) {
-        e.polyglotQuerySplitEditor()?.inEditorResults = state
-    }
-
-    override fun update(e: AnActionEvent) {
-        super.update(e)
-        e.presentation.isVisible = e.presentation.isVisible && Plugin.GRID.isActive()
+        e.groovySplitEditor()?.inEditorResults = state
     }
 
 }
