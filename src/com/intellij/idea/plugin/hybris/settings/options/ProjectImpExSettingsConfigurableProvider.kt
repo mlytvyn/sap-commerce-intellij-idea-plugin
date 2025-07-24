@@ -18,6 +18,7 @@
 
 package com.intellij.idea.plugin.hybris.settings.options
 
+import com.intellij.ide.projectView.ProjectView
 import com.intellij.idea.plugin.hybris.common.utils.HybrisI18NBundleUtils.message
 import com.intellij.idea.plugin.hybris.settings.components.DeveloperSettingsComponent
 import com.intellij.idea.plugin.hybris.util.isHybrisProject
@@ -34,16 +35,22 @@ class ProjectImpExSettingsConfigurableProvider(val project: Project) : Configura
     override fun canCreateConfigurable() = project.isHybrisProject
     override fun createConfigurable() = SettingsConfigurable(project)
 
-    class SettingsConfigurable(project: Project) : BoundSearchableConfigurable(
+    class SettingsConfigurable(private val project: Project) : BoundSearchableConfigurable(
         message("hybris.settings.project.impex.title"), "hybris.impex.settings"
     ) {
 
         private val projectSettings = DeveloperSettingsComponent.getInstance(project).state.impexSettings
+        private var originalGroupLocalizedFiles = projectSettings.groupLocalizedFiles
 
         private lateinit var foldingEnableCheckBox: JCheckBox
         private lateinit var documentationEnableCheckBox: JCheckBox
 
         override fun createPanel() = panel {
+            row {
+                checkBox("Group localized ImpEx files")
+                    .bindSelected(projectSettings::groupLocalizedFiles)
+            }
+
             group("Data Edit Mode") {
                 row {
                     checkBox("First row is header")
@@ -54,6 +61,7 @@ class ProjectImpExSettingsConfigurableProvider(val project: Project) : Configura
                         .bindSelected(projectSettings.editMode::trimWhitespace)
                 }
             }.rowComment("This functionality relies and expects that 'intellij.grid.plugin' is available and enabled.")
+
             group("Code Folding") {
                 row {
                     foldingEnableCheckBox = checkBox("Enable code folding")
@@ -71,6 +79,7 @@ class ProjectImpExSettingsConfigurableProvider(val project: Project) : Configura
                         .enabledIf(foldingEnableCheckBox.selected)
                 }
             }
+
             group("Code Completion") {
                 row {
                     checkBox("Show inline type for reference header parameter")
@@ -128,6 +137,16 @@ class ProjectImpExSettingsConfigurableProvider(val project: Project) : Configura
                         .bindSelected(projectSettings.documentation::showModifierDocumentation)
                         .enabledIf(documentationEnableCheckBox.selected)
                 }
+            }
+        }
+
+        override fun apply() {
+            super.apply()
+
+            if (projectSettings.groupLocalizedFiles != originalGroupLocalizedFiles) {
+                originalGroupLocalizedFiles = projectSettings.groupLocalizedFiles
+
+                ProjectView.getInstance(project).refresh()
             }
         }
     }
