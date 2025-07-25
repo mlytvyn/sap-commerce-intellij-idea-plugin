@@ -16,6 +16,7 @@
 ### `FlexibleSearch` enhancements
 - Use toggle action for Parameters view toggler [#1437](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1437)
 - Introduced `In-Editor Results` for FlexibleSearch queries [#1438](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1438)
+- Introduced simplified `In-Editor Results` for IntelliJ Community edition [#1484](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1484)
 - Use scrollable panel for In-Editor error response [#1440](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1440)
 - Improved representation of the error response [#1441](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1441)
 - Improved update operation for console related actions [#1442](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1442)
@@ -31,6 +32,7 @@
 
 ### `Polyglot Query` enhancements
 - Introduced `In-Editor Results` view [#1462](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1462)
+- Introduced simplified `In-Editor Results` for IntelliJ Community edition [#1484](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1484)
 - Introduced `In-Editor Parameters` view [#1463](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1463)
 - Display an Inlay Hint for a bind parameters [#1464](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1464)
 - Retrieve and show all data for found Items [#1465](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1465)

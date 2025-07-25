@@ -23,6 +23,7 @@ import com.intellij.idea.plugin.hybris.editor.InEditorResultsView
 import com.intellij.idea.plugin.hybris.flexibleSearch.FlexibleSearchLanguage
 import com.intellij.idea.plugin.hybris.flexibleSearch.file.FlexibleSearchFileType
 import com.intellij.idea.plugin.hybris.grid.GridXSVFormatService
+import com.intellij.idea.plugin.hybris.project.utils.Plugin
 import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionResult
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.components.Service
@@ -31,6 +32,8 @@ import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.ui.dsl.builder.Align
+import com.intellij.ui.dsl.builder.panel
 import kotlinx.coroutines.CoroutineScope
 import javax.swing.JComponent
 
@@ -61,7 +64,17 @@ class FlexibleSearchInEditorResultsView(
             ?: multiResultsNotSupportedView()
     }
 
-    suspend fun resultsView(fileEditor: FlexibleSearchSplitEditor, content: String): JComponent {
+    suspend fun resultsView(fileEditor: FlexibleSearchSplitEditor, content: String) = if (Plugin.GRID.isActive()) csvTableView(fileEditor, content)
+    else simpleTableView(content)
+
+    private fun simpleTableView(content: String): JComponent = panel {
+        row {
+            scrollCell(FlexibleSearchSimplifiedTableView.of(content))
+                .align(Align.FILL)
+        }.resizableRow()
+    }
+
+    private suspend fun csvTableView(fileEditor: FlexibleSearchSplitEditor, content: String): JComponent {
         val lvf = LightVirtualFile(
             fileEditor.file?.name + "_temp.${FlexibleSearchFileType.defaultExtension}.result.csv",
             PlainTextFileType.INSTANCE,
