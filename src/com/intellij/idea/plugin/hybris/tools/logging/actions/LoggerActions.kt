@@ -27,7 +27,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 
-abstract class CxLoggerAction(private val logLevel: LogLevel) : AnAction(logLevel.name, "", logLevel.icon) {
+abstract class CxLoggerAction(private val logLevel: LogLevel) : AnAction() {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
@@ -50,10 +50,11 @@ abstract class CxLoggerAction(private val logLevel: LogLevel) : AnAction(logLeve
         val isRightPlace = "GoToAction" != e.place
         val project = e.project ?: return
 
-        e.presentation.isEnabled = isRightPlace && CxLoggerAccess.getInstance(project).canRefresh
+        e.presentation.text = logLevel.name
+        e.presentation.icon = logLevel.icon
+        e.presentation.isEnabled = isRightPlace && CxLoggerAccess.getInstance(project).ready
         e.presentation.isVisible = isRightPlace
     }
-
 }
 
 class AllLoggerAction : CxLoggerAction(LogLevel.ALL)
@@ -66,7 +67,9 @@ class ErrorLoggerAction : CxLoggerAction(LogLevel.ERROR)
 class FatalLoggerAction : CxLoggerAction(LogLevel.FATAL)
 class SevereLoggerAction : CxLoggerAction(LogLevel.SEVERE)
 
-class FetchLoggerStateAction : AnAction("Fetch Logger State", "", HybrisIcons.Log.Action.FETCH) {
+class FetchLoggerStateAction : AnAction() {
+
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -78,15 +81,16 @@ class FetchLoggerStateAction : AnAction("Fetch Logger State", "", HybrisIcons.Lo
     override fun update(e: AnActionEvent) {
         val isRightPlace = "GoToAction" != e.place
         val project = e.project ?: return
+        val loggerAccess = CxLoggerAccess.getInstance(project)
 
-        e.presentation.isEnabled = isRightPlace && CxLoggerAccess.getInstance(project).canRefresh
+        e.presentation.isEnabled = isRightPlace && loggerAccess.ready
         e.presentation.isVisible = isRightPlace
 
-        if (CxLoggerAccess.getInstance(project).cacheInitialized) {
-            e.presentation.text = "Refresh Logger State"
+        if (CxLoggerAccess.getInstance(project).stateInitialized) {
+            e.presentation.text = "Refresh Loggers State"
             e.presentation.icon = HybrisIcons.Log.Action.REFRESH
         } else {
-            e.presentation.text = "Fetch Logger State"
+            e.presentation.text = "Fetch Loggers State"
             e.presentation.icon = HybrisIcons.Log.Action.FETCH
         }
     }
