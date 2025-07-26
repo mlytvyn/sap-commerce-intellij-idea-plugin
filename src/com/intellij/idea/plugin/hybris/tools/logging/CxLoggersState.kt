@@ -18,7 +18,7 @@
 
 package com.intellij.idea.plugin.hybris.tools.logging
 
-class CxLoggersStorage {
+class CxLoggersState {
 
     private val loggers: MutableMap<String, CxLoggerModel>
     private var _initialized: Boolean = false
@@ -56,7 +56,7 @@ class CxLoggersStorage {
             .takeIf { it.isNotBlank() }
             ?.let { get(it) }
             ?: loggers[CxLoggerModel.ROOT_LOGGER_NAME]
-            ?: CxLoggerModel.root()
+            ?: CxLoggerModel.rootFallback()
 
         return loggers.getOrPut(loggerIdentifier) {
             CxLoggerModel.inherited(loggerIdentifier, parentLogger)
