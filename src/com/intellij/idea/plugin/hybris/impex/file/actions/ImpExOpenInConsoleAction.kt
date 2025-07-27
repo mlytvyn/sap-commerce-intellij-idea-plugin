@@ -23,24 +23,27 @@ import com.intellij.idea.plugin.hybris.common.HybrisConstants.IMPEX_FILE_EXTENSI
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.tools.remote.console.impl.HybrisImpexConsole
 import com.intellij.idea.plugin.hybris.util.isHybrisProject
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.DumbAwareAction
 
-class ImpExOpenInConsoleAction : AnAction(
-    "Copy to ImpEx Console",
-    "Copy ImpEx file to SAP Commerce console",
-    HybrisIcons.Console.Actions.OPEN
-), DumbAware {
+class ImpExOpenInConsoleAction : DumbAwareAction() {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
-    override fun update(event: AnActionEvent) {
-        val project = event.project ?: return
+    override fun update(e: AnActionEvent) {
+        e.presentation.isVisible = ActionPlaces.ACTION_SEARCH != e.place
+        if (!e.presentation.isVisible) return
 
-        event.presentation.isEnabledAndVisible = project.isHybrisProject
+        val project = e.project ?: return
+
+        e.presentation.isEnabledAndVisible = project.isHybrisProject
             && OpenInHybrisConsoleService.getInstance(project).isRequiredMultipleFileExtension(IMPEX_FILE_EXTENSION)
+
+        e.presentation.text = "Copy to ImpEx Console"
+        e.presentation.description = "Copy ImpEx file to SAP Commerce console"
+        e.presentation.icon = HybrisIcons.Console.Actions.OPEN
     }
 
     override fun actionPerformed(event: AnActionEvent) {
