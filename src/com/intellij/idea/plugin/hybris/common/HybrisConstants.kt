@@ -27,11 +27,14 @@ import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
 import com.intellij.idea.plugin.hybris.polyglotQuery.psi.PolyglotQueryTypes
 import com.intellij.idea.plugin.hybris.project.descriptors.HybrisProjectDescriptor
 import com.intellij.idea.plugin.hybris.project.descriptors.ModuleDescriptor
+import com.intellij.idea.plugin.hybris.tools.remote.execution.flexibleSearch.FlexibleSearchExecutionContext
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.psi.tree.IFileElementType
 import java.time.format.DateTimeFormatter
+import java.util.*
+import java.util.regex.Pattern
 
 object HybrisConstants {
 
@@ -219,6 +222,7 @@ object HybrisConstants {
     const val PROPERTY_BUILD_COMPILER = "build.compiler"
     const val PROPERTY_OPTIONAL_CONFIG_DIR = "hybris.optional.config.dir"
     const val PROPERTY_LANG_PACKS = "lang.packs"
+    const val PROPERTY_INSTALLED_TENANTS = "installed.tenants"
     const val PROPERTY_IMPEX_HEADER_REPLACEMENT = "impex.header.replacement"
     const val PROPERTY_ENV_PROPERTY_PREFIX = "env.properties.prefix"
 
@@ -728,7 +732,7 @@ object HybrisConstants {
     @JvmStatic
     val KEY_FINALIZE_PROJECT_IMPORT: Key<Triple<HybrisProjectDescriptor, List<ModuleDescriptor>, Boolean>> = Key.create("hybrisProjectImportFinalize")
     val KEY_ANT_UPDATE_MAVEN_DEPENDENCIES = Key.create<Boolean>("notification_update_external-dependencies.xml")
-    val KEY_REMOTE_EXECUTION_CONTENT = Key.create<String>("hybris.http.remote.execution.content")
+    val KEY_FXS_EXECUTION_SETTINGS = Key.create<FlexibleSearchExecutionContext.Settings>("sap.cx.fxs.execution.settings")
 
     val DATA_KEY_LOGGER_IDENTIFIER = DataKey.create<String>("sap.cx.logger.identifier")
 
@@ -801,5 +805,22 @@ object HybrisConstants {
 
     object Documentation {
         const val WIKI_ACL = "https://github.com/epam/sap-commerce-intellij-idea-plugin/wiki/Languages:-Access-Control-Lists"
+    }
+
+    object Locales {
+        val LOCALIZED_FILE_NAME: Pattern = Pattern.compile("(_[a-zA-Z]{2,8}(_[a-zA-Z]{2}|[0-9]{3})?(_[\\w\\-]+)?)\\.[^_]+$")
+        val LOCALES_CODES by lazy {
+            val locales = Locale.getAvailableLocales()
+                .flatMap {
+                    try {
+                        listOf(it.language, it.isO3Language)
+                    } catch (_: MissingResourceException) {
+                        listOf(it.language)
+                    }
+                }
+            (Locale.getISOLanguages() + locales)
+                .filter { it.isNotBlank() }
+                .toSortedSet()
+        }
     }
 }

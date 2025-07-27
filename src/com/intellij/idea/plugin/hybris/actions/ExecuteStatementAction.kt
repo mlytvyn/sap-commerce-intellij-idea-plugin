@@ -22,10 +22,7 @@ import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsole
 import com.intellij.idea.plugin.hybris.tools.remote.console.HybrisConsoleService
 import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionContext
 import com.intellij.lang.Language
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.project.DumbAware
@@ -38,10 +35,10 @@ import kotlin.reflect.KClass
 abstract class ExecuteStatementAction<C : HybrisConsole<out ExecutionContext>, F : FileEditor>(
     internal val language: Language,
     internal val consoleClass: KClass<C>,
-    internal val name: String,
-    internal val description: String,
-    internal val icon: Icon
-) : AnAction(name, description, icon), DumbAware {
+    private val name: String,
+    private val description: String,
+    private val icon: Icon
+) : AnAction(), DumbAware {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
@@ -70,12 +67,18 @@ abstract class ExecuteStatementAction<C : HybrisConsole<out ExecutionContext>, F
     abstract fun fileEditor(e: AnActionEvent): F?
 
     override fun update(e: AnActionEvent) {
+        e.presentation.isVisible = ActionPlaces.ACTION_SEARCH != e.place
+        if (!e.presentation.isVisible) return
+
         e.presentation.isEnabledAndVisible = this.language == e.dataContext.getData(CommonDataKeys.LANGUAGE)
 
         val queryExecuting = fileEditor(e)
             ?.getUserData(KEY_QUERY_EXECUTING)
             ?: false
 
+        e.presentation.text = name
+        e.presentation.description = description
+        e.presentation.icon = icon
         e.presentation.isEnabledAndVisible = e.presentation.isEnabledAndVisible
         e.presentation.isEnabled = e.presentation.isEnabledAndVisible && !queryExecuting
         e.presentation.disabledIcon = if (queryExecuting) AnimatedIcon.Default.INSTANCE
