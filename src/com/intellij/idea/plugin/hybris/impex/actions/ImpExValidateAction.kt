@@ -21,9 +21,9 @@ import com.intellij.idea.plugin.hybris.actions.ExecuteStatementAction
 import com.intellij.idea.plugin.hybris.common.utils.HybrisIcons
 import com.intellij.idea.plugin.hybris.impex.ImpexLanguage
 import com.intellij.idea.plugin.hybris.impex.editor.ImpExSplitEditor
+import com.intellij.idea.plugin.hybris.impex.editor.impexExecutionContextSettings
 import com.intellij.idea.plugin.hybris.impex.editor.impexSplitEditor
 import com.intellij.idea.plugin.hybris.tools.remote.console.impl.HybrisImpexConsole
-import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ExecutionMode
 import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionClient
 import com.intellij.idea.plugin.hybris.tools.remote.execution.impex.ImpExExecutionContext
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -43,9 +43,11 @@ class ImpExValidateAction : ExecuteStatementAction<HybrisImpexConsole, ImpExSpli
 
     override fun actionPerformed(e: AnActionEvent, project: Project, content: String) {
         val fileEditor = fileEditor(e) ?: return
+        val settings = e.impexExecutionContextSettings { ImpExExecutionContext.DEFAULT_SETTINGS }
         val context = ImpExExecutionContext(
             content = content,
-            executionMode = ExecutionMode.VALIDATE
+            executionMode = ImpExExecutionContext.ExecutionMode.VALIDATE,
+            settings = settings
         )
 
         if (fileEditor.inEditorResults) {
