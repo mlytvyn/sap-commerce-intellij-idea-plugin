@@ -43,14 +43,14 @@ class ImpExExecutionClient(project: Project, coroutineScope: CoroutineScope) : D
     override suspend fun execute(context: ImpExExecutionContext): DefaultExecutionResult {
         val settings = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
         val actionUrl = when (context.executionMode) {
-            ExecutionMode.IMPORT -> settings.generatedURL + "/console/impex/import"
-            ExecutionMode.VALIDATE -> settings.generatedURL + "/console/impex/import/validate"
+            ImpExExecutionContext.ExecutionMode.IMPORT -> settings.generatedURL + "/console/impex/import"
+            ImpExExecutionContext.ExecutionMode.VALIDATE -> settings.generatedURL + "/console/impex/import/validate"
         }
         val params = context.params()
             .map { BasicNameValuePair(it.key, it.value) }
 
         val response = HybrisHacHttpClient.getInstance(project)
-            .post(actionUrl, params, false, context.timeout, settings, null)
+            .post(actionUrl, params, false, context.settings.timeout, settings, null)
         val statusLine = response.statusLine
         val statusCode = statusLine.statusCode
 
@@ -63,7 +63,7 @@ class ImpExExecutionClient(project: Project, coroutineScope: CoroutineScope) : D
             val document = Jsoup.parse(response.entity.content, StandardCharsets.UTF_8.name(), "")
 
             return when (context.executionMode) {
-                ExecutionMode.IMPORT -> processResponse(document, "impexResult") { element ->
+                ImpExExecutionContext.ExecutionMode.IMPORT -> processResponse(document, "impexResult") { element ->
                     if (element.attr("data-level") == "error") DefaultExecutionResult(
                         statusCode = HttpStatus.SC_BAD_REQUEST,
                         errorMessage = element.attr("data-result").takeIf { it.isNotBlank() },
@@ -76,7 +76,7 @@ class ImpExExecutionClient(project: Project, coroutineScope: CoroutineScope) : D
                     )
                 }
 
-                ExecutionMode.VALIDATE -> processResponse(document, "validationResultMsg") { element ->
+                ImpExExecutionContext.ExecutionMode.VALIDATE -> processResponse(document, "validationResultMsg") { element ->
                     if ("error" == element.attr("data-level")) DefaultExecutionResult(
                         statusCode = HttpStatus.SC_BAD_REQUEST,
                         errorMessage = element.attr("data-result").takeIf { it.isNotBlank() }
