@@ -1,5 +1,10 @@
 ## [2024.3.1]
 
+### Other
+- Fixed Kotlin Plugin API unintended usages [#1494](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1494)
+
+## [2024.3.1]
+
 ### `Search Everywhere` enhancements
 - Introduced possibility to search through Type System via _Search Everywhere_ [#1267](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1267)
 - Added scope and preview for Type System Search Everywhere [#1269](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1269)
