@@ -26,6 +26,8 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
@@ -39,7 +41,8 @@ import javax.swing.SwingConstants
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
 
-class HybrisConsolesView(val project: Project) : SimpleToolWindowPanel(true), Disposable {
+@Service(Service.Level.PROJECT)
+class HybrisConsolesView(project: Project) : SimpleToolWindowPanel(true), Disposable {
 
     override fun dispose() {
         //NOP
@@ -102,6 +105,8 @@ class HybrisConsolesView(val project: Project) : SimpleToolWindowPanel(true), Di
     companion object {
         @Serial
         private val serialVersionUID: Long = 5761094275961283320L
+
+        fun getInstance(project: Project): HybrisConsolesView = project.service()
     }
 }
 
