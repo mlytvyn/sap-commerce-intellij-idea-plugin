@@ -1,6 +1,7 @@
 /*
- * This file is part of "hybris integration" plugin for Intellij IDEA.
+ * This file is part of "SAP Commerce Developers Toolset" plugin for IntelliJ IDEA.
  * Copyright (C) 2014-2016 Alexander Bartash <AlexanderBartash@gmail.com>
+ * Copyright (C) 2019-2025 EPAM Systems <hybrisideaplugin@epam.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -22,8 +23,10 @@ import com.intellij.ide.util.projectWizard.WizardContext
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.HybrisUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.impl.welcomeScreen.WelcomeFrame
 import com.intellij.projectImport.ProjectImportBuilder
 import com.intellij.projectImport.ProjectOpenProcessorBase
+import com.intellij.util.application
 
 class HybrisProjectOpenProcessor : ProjectOpenProcessorBase<OpenHybrisProjectImportBuilder>() {
 
@@ -33,8 +36,22 @@ class HybrisProjectOpenProcessor : ProjectOpenProcessorBase<OpenHybrisProjectImp
         }
 
         val providers = ImportModuleAction.getProviders(null)
-        ImportModuleAction.doImport(null) {
-            ImportModuleAction.createImportWizard(null, null, file, *providers.toTypedArray())
+        var cancel = false
+
+        application.invokeAndWait {
+            ImportModuleAction.doImport(null) {
+                val createImportWizard = ImportModuleAction.createImportWizard(null, null, file, *providers.toTypedArray())
+                createImportWizard?.cancelButton?.addActionListener {
+                    cancel = true
+                }
+                createImportWizard
+            }
+        }
+
+        if (cancel) {
+            application.invokeLater {
+                WelcomeFrame.showIfNoProjectOpened()
+            }
         }
 
         return false
