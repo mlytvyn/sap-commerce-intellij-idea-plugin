@@ -19,50 +19,66 @@
 package com.intellij.idea.plugin.hybris.project
 
 import com.intellij.ide.actions.ImportModuleAction
-import com.intellij.ide.util.projectWizard.WizardContext
 import com.intellij.idea.plugin.hybris.common.HybrisConstants
 import com.intellij.idea.plugin.hybris.common.HybrisUtil
+import com.intellij.openapi.application.runInEdt
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.projectRoots.ProjectJdkTable
+import com.intellij.openapi.projectRoots.SdkType
+import com.intellij.openapi.roots.OrderRootType
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.impl.welcomeScreen.WelcomeFrame
 import com.intellij.projectImport.ProjectImportBuilder
 import com.intellij.projectImport.ProjectOpenProcessorBase
-import com.intellij.util.application
+import com.intellij.util.asSafely
 
 class HybrisProjectOpenProcessor : ProjectOpenProcessorBase<OpenHybrisProjectImportBuilder>() {
 
-    public override fun doQuickImport(file: VirtualFile, wizardContext: WizardContext): Boolean {
-        if (file.isDirectory) {
-            wizardContext.setProjectFileDirectory(file.path)
-        }
+    override fun doOpenProject(virtualFile: VirtualFile, projectToClose: Project?, forceOpenInNewFrame: Boolean): Project? {
+        val jdkTable = ProjectJdkTable.getInstance()
+        val orderRootTypes = OrderRootType.getAllTypes()
 
-        val providers = ImportModuleAction.getProviders(null)
-        var cancel = false
+        runInEdt { jdkTable.preconfigure() }
 
-        application.invokeAndWait {
-            ImportModuleAction.doImport(null) {
-                val createImportWizard = ImportModuleAction.createImportWizard(null, null, file, *providers.toTypedArray())
-                createImportWizard?.cancelButton?.addActionListener {
-                    cancel = true
+        ProgressManager.getInstance().runProcessWithProgressSynchronously<Unit, RuntimeException>(
+            {
+                jdkTable.allJdks.forEach { sdk ->
+                    sdk.homeDirectory
+
+                    sdk.sdkType.asSafely<SdkType>()
+                        ?.let { sdkType ->
+                            orderRootTypes
+                                .filter { sdkType.isRootTypeApplicable(it) }
+                                .forEach { orderRootType ->
+                                    sdk.sdkModificator.getRoots(orderRootType)
+                                }
+                        }
                 }
-                createImportWizard
+            },
+            "Detecting SDKs...",
+            true,
+            null
+        )
+
+        val providers = ImportModuleAction.getProviders(null).toTypedArray()
+
+        runInEdt {
+            ImportModuleAction.doImport(null) {
+                ImportModuleAction.createImportWizard(null, null, virtualFile, *providers)
+                    ?.apply {
+                        cancelButton.addActionListener {
+                            WelcomeFrame.showIfNoProjectOpened()
+                        }
+                    }
             }
         }
 
-        if (cancel) {
-            application.invokeLater {
-                WelcomeFrame.showIfNoProjectOpened()
-            }
-        }
-
-        return false
+        return null
     }
 
-    override fun canOpenProject(file: VirtualFile): Boolean {
-        val canOpenSimpleVerification = super.canOpenProject(file)
-        return if (canOpenSimpleVerification) {
-            true
-        } else HybrisUtil.isPotentialHybrisProject(file)
-    }
+    override fun canOpenProject(file: VirtualFile) = if (super.canOpenProject(file)) true
+    else HybrisUtil.isPotentialHybrisProject(file)
 
     override val supportedExtensions = arrayOf(
         HybrisConstants.EXTENSION_INFO_XML,
