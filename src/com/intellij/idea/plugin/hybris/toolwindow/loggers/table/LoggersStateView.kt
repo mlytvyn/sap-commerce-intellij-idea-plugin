@@ -18,39 +18,135 @@
 
 package com.intellij.idea.plugin.hybris.toolwindow.loggers.table
 
-import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings
+import com.intellij.ide.projectView.ProjectView
+import com.intellij.ide.util.PsiNavigationSupport
+import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerAccess
 import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerModel
+import com.intellij.idea.plugin.hybris.tools.logging.LogLevel
+import com.intellij.openapi.application.edtWriteAction
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.observable.properties.AtomicBooleanProperty
 import com.intellij.openapi.project.Project
-import com.intellij.ui.dsl.builder.Align
-import com.intellij.ui.dsl.builder.panel
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiPackage
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.startOffset
+import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.dsl.builder.*
+import com.intellij.util.asSafely
+import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import javax.swing.DefaultComboBoxModel
 import javax.swing.JComponent
 
 @Service(Service.Level.PROJECT)
-class LoggersStateView(
-    val project: Project,
-    val coroutineScope: CoroutineScope
-) {
+class LoggersStateView(private val project: Project, private val coroutineScope: CoroutineScope) {
 
-    fun renderView(loggers: Map<String, CxLoggerModel>, connectionSettings: RemoteConnectionSettings, applyView: (CoroutineScope, JComponent) -> Unit) {
+    fun renderView(loggers: Map<String, CxLoggerModel>, applyView: (CoroutineScope, JComponent) -> Unit) {
         coroutineScope.launch {
             if (project.isDisposed) return@launch
 
             val view = panel {
                 row {
-                    scrollCell(
-                        LoggersTable.of(project, loggers, connectionSettings)
-                    )
+                    scrollCell(dataView(loggers))
+                        .resizableColumn()
                         .align(Align.FILL)
-                }.resizableRow()
+                }
+                    .resizableRow()
             }
 
             applyView(this, view)
         }
     }
+
+    private fun dataView(loggers: Map<String, CxLoggerModel>): JComponent = panel {
+        val editable = AtomicBooleanProperty(true)
+
+        row {
+            label("Effective level")
+
+            label("Logger")
+            label("")
+
+            label("Parent")
+        }
+            .bottomGap(BottomGap.SMALL)
+            .layout(RowLayout.PARENT_GRID)
+
+        loggers.values
+//            .sortedWith(compareBy({ it.parentName }, { it.name }))
+            .sortedBy { it.name }
+            .forEach { cxLogger ->
+                row {
+                    val model = DefaultComboBoxModel<LogLevel>().apply {
+                        LogLevel.entries
+                            .filter { it != LogLevel.CUSTOM || (cxLogger.level == LogLevel.CUSTOM) }
+                            .forEach { addElement(it) }
+                    }
+                    comboBox(
+                        model,
+                        renderer = SimpleListCellRenderer.create { label, value, _ ->
+                            if (value != null) {
+                                label.icon = value.icon
+                                label.text = value.name
+                            }
+                        }
+                    )
+                        .align(AlignX.FILL)
+                        .bindItem({ cxLogger.level }, { _ -> })
+                        .enabledIf(editable)
+                        .component
+                        .addItemListener { event ->
+                            val currentCxLogger = loggers[cxLogger.name] ?: return@addItemListener
+                            val newLogLevel = event.item.asSafely<LogLevel>() ?: return@addItemListener
+
+                            if (currentCxLogger.level != newLogLevel) {
+                                editable.set(false)
+                                CxLoggerAccess.getInstance(project).setLogger(cxLogger.name, newLogLevel)
+                            }
+                        }
+
+                    icon(cxLogger.icon)
+                        .gap(RightGap.SMALL)
+
+                    if (cxLogger.resolved) {
+                        link(cxLogger.name) {
+                            cxLogger.psiElementPointer?.element?.let { psiElement ->
+                                when (psiElement) {
+                                    is PsiPackage -> {
+                                        coroutineScope.launch {
+                                            val directory = readAction {
+                                                psiElement.getDirectories(GlobalSearchScope.allScope(project))
+                                                    .firstOrNull()
+                                            } ?: return@launch
+
+                                            edtWriteAction {
+                                                ProjectView.getInstance(project).selectPsiElement(directory, true)
+                                            }
+                                        }
+                                    }
+
+                                    is PsiClass -> PsiNavigationSupport.getInstance()
+                                        .createNavigatable(project, psiElement.containingFile.virtualFile, psiElement.startOffset)
+                                        .navigate(true)
+                                }
+                            }
+                        }
+                    } else {
+                        label(cxLogger.name)
+                    }
+
+                    label(cxLogger.parentName ?: "")
+                }
+                    .layout(RowLayout.PARENT_GRID)
+            }
+    }
+        .apply {
+            border = JBUI.Borders.empty(0, 16, 16, 16)
+        }
 
     companion object {
         fun getInstance(project: Project): LoggersStateView = project.service()

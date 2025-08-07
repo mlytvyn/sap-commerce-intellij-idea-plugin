@@ -81,7 +81,7 @@ class GroovyExecuteAction : ExecuteStatementAction<HybrisGroovyConsole, GroovySp
                     completed++
                     fileEditor.showLoader("$prefix | $completed of ${contexts.size} | ${GroovyExecutionContext.DEFAULT_TITLE}")
                 },
-                resultsCallback = { coroutineScope, results ->
+                afterCallback = { coroutineScope, results ->
                     fileEditor.renderExecutionResults(results)
                     fileEditor.putUserData(KEY_QUERY_EXECUTING, false)
                 },
@@ -100,8 +100,8 @@ class GroovyExecuteAction : ExecuteStatementAction<HybrisGroovyConsole, GroovySp
 
             executionClient.execute(
                 contexts = contexts,
-                resultCallback = { coroutineScope, result -> console.print(result, false) },
-                resultsCallback = { coroutineScope, results -> console.afterExecution() },
+                resultCallback = { _, result -> console.print(result, false) },
+                afterCallback = { _, _ -> console.afterExecution() }
             )
         }
     }
