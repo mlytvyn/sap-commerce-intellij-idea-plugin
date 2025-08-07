@@ -69,7 +69,8 @@ class ErrorLoggerAction : CxLoggerAction(LogLevel.ERROR)
 class FatalLoggerAction : CxLoggerAction(LogLevel.FATAL)
 class SevereLoggerAction : CxLoggerAction(LogLevel.SEVERE)
 
-class FetchLoggerStateAction : AnAction() {
+//TODO display an animated icon for fetching state only if action is in toolbar
+class FetchLoggersStateAction : AnAction() {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
@@ -92,12 +93,9 @@ class FetchLoggerStateAction : AnAction() {
 
         e.presentation.isEnabled = loggerAccess.ready
 
-        if (CxLoggerAccess.getInstance(project).stateInitialized) {
-            e.presentation.text = "Refresh Loggers State"
-            e.presentation.icon = HybrisIcons.Log.Action.REFRESH
-        } else {
-            e.presentation.text = "Fetch Loggers State"
-            e.presentation.icon = HybrisIcons.Log.Action.FETCH
-        }
+        val state = CxLoggerAccess.getInstance(project).stateInitialized
+
+        e.presentation.text = if (state) "Refresh Loggers State" else "Fetch Loggers State"
+        e.presentation.icon = if (state) HybrisIcons.Log.Action.REFRESH else HybrisIcons.Log.Action.FETCH
     }
 }

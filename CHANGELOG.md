@@ -1,5 +1,8 @@
 ## [2025.2.1]
 
+### `SAP CX Logging` enhancements
+- Added Cx Loggers toolwindow in SAP CX panel [1508](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1508)
+
 ### Other
 - Properties API adjustments [#1510](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1510)
 - Added events and listeners for HAC and SOLR connection modifications [#1512](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1512)

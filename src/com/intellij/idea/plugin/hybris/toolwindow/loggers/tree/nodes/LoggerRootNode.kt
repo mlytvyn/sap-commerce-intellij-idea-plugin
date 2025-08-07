@@ -16,9 +16,21 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.intellij.idea.plugin.hybris.actions
+package com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.nodes
 
-object HybrisActionPlaces {
-    const val CONSOLE_TOOLBAR = "Hybris.Consoles.ContextMenu"
-    const val LOGGERS_TOOLBAR = "SAP.Loggers.View"
+import com.intellij.ide.projectView.PresentationData
+import com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.LoggersOptionsTree
+import com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.nodes.options.remote.RemoteHacInstancesLoggersOptionsNode
+import com.intellij.ui.SimpleTextAttributes
+
+class LoggerRootNode(tree: LoggersOptionsTree) : LoggerNode(tree.myProject) {
+
+    override fun update(presentation: PresentationData) {
+        presentation.addText(name, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    }
+
+    override fun getNewChildren(parameters: LoggerNodeParameters) = listOf(
+        RemoteHacInstancesLoggersOptionsNode(project)
+        //LoggersTemplateLoggersOptionsNode(project)
+    ).associateBy { it.name }
 }

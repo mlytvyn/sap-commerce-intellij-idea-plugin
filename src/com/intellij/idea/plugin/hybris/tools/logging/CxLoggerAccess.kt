@@ -38,29 +38,39 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.util.*
 
 @Service(Service.Level.PROJECT)
 class CxLoggerAccess(private val project: Project, private val coroutineScope: CoroutineScope) : Disposable {
     private var fetching: Boolean = false
-    val loggersState = CxLoggersState()
+    private val loggersStates = WeakHashMap<RemoteConnectionSettings, CxLoggersState>()
+    val cxLoggerUtilities: CxLoggerUtilities = CxLoggerUtilities.getInstance(project)
+
 
     val ready: Boolean
         get() = !fetching
 
     val stateInitialized: Boolean
-        get() = loggersState.initialized
+        get() {
+            val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
+            return loggers(server).initialized
+        }
 
     init {
         with(project.messageBus.connect(this)) {
             subscribe(RemoteConnectionListener.TOPIC, object : RemoteConnectionListener {
+
                 override fun onActiveHybrisConnectionChanged(remoteConnection: RemoteConnectionSettings) = refresh()
 
-                override fun onActiveSolrConnectionChanged(remoteConnection: RemoteConnectionSettings) = refresh()
+                override fun onHybrisConnectionModified(remoteConnection: RemoteConnectionSettings) = clearState(remoteConnection)
             })
         }
     }
 
-    fun logger(loggerIdentifier: String): CxLoggerModel? = if (!stateInitialized) null else loggersState.get(loggerIdentifier)
+    fun logger(loggerIdentifier: String): CxLoggerModel? {
+        val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
+        return if (stateInitialized) loggers(server).get(loggerIdentifier) else null
+    }
 
     fun setLogger(loggerName: String, logLevel: LogLevel) {
         val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
@@ -71,7 +81,8 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         )
         fetching = true
         LoggingExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
-            updateState(result.loggers)
+            updateState(result.loggers, server)
+            project.messageBus.syncPublisher(LoggersStateListener.TOPIC).onLoggersStateChanged(server)
 
             if (result.hasError) notify(NotificationType.ERROR, "Failed To Update Log Level") {
                 """
@@ -89,8 +100,9 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         }
     }
 
-    fun fetch() {
-        val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
+    fun fetch() = fetch(RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris))
+
+    fun fetch(server: RemoteConnectionSettings) {
         val context = GroovyExecutionContext(
             executionTitle = "Fetching Loggers from SAP Commerce [${server.shortenConnectionName()}]...",
             content = ExtensionResource.CX_LOGGERS_STATE.content,
@@ -100,60 +112,54 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         fetching = true
 
         GroovyExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
-            val loggers = result.result
-                ?.split("\n")
-                ?.map { it.split(" | ") }
-                ?.filter { it.size == 3 }
-                ?.map { CxLoggerModel.of(it[0], it[1], it[2]) }
-                ?.distinctBy { it.name }
-                ?.associateBy { it.name }
-                ?.takeIf { it.isNotEmpty() }
+            coroutineScope.launch {
+                val loggers = result.result
+                    ?.split("\n")
+                    ?.map { it.split(" | ") }
+                    ?.filter { it.size == 3 }
+                    ?.map { CxLoggerModel.of(it[0], it[1], it[2], false, cxLoggerUtilities.getIcon(it[0])) }
+                    ?.distinctBy { it.name }
+                    ?.associateBy { it.name }
+                    ?.takeIf { it.isNotEmpty() }
 
-            if (loggers == null || result.hasError) {
-                clearState()
-            } else {
-                updateState(loggers)
-            }
-
-            when {
-                result.hasError -> notify(NotificationType.ERROR, "Failed to retrieve loggers state") {
-                    "<p>${result.errorMessage}</p>"
-                    "<p>Server: ${server.shortenConnectionName()}</p>"
+                if (loggers == null || result.hasError) {
+                    clearState(server)
+                } else {
+                    updateState(loggers, server)
                 }
 
-                loggers == null -> notify(NotificationType.WARNING, "Unable to retrieve loggers state") {
-                    "<p>No Loggers information returned from the remote server or is in the incorrect format.</p>"
-                    "<p>Server: ${server.shortenConnectionName()}</p>"
-                }
+                project.messageBus.syncPublisher(LoggersStateListener.TOPIC).onLoggersStateChanged(server)
 
-                else -> notify(NotificationType.INFORMATION, "Loggers state is fetched.") {
-                    """
+                when {
+                    result.hasError -> notify(NotificationType.ERROR, "Failed to retrieve loggers state") {
+                        "<p>${result.errorMessage}</p>"
+                        "<p>Server: ${server.shortenConnectionName()}</p>"
+                    }
+
+                    loggers == null -> notify(NotificationType.WARNING, "Unable to retrieve loggers state") {
+                        "<p>No Loggers information returned from the remote server or is in the incorrect format.</p>"
+                        "<p>Server: ${server.shortenConnectionName()}</p>"
+                    }
+
+                    else -> notify(NotificationType.INFORMATION, "Loggers state is fetched.") {
+                        """
                     <p>Declared loggers: ${loggers.size}</p>
                     <p>Server: ${server.shortenConnectionName()}</p>
                 """.trimIndent()
+                    }
                 }
             }
         }
     }
 
-    private fun updateState(loggers: Map<String, CxLoggerModel>?) {
-        coroutineScope.launch {
-
-            loggersState.update(loggers ?: emptyMap())
-
-            edtWriteAction {
-                PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)
-            }
-
-            fetching = false
-        }
+    fun loggers(settings: RemoteConnectionSettings): CxLoggersState {
+        return loggersStates.computeIfAbsent(settings) { CxLoggersState() }
     }
 
-    private fun refresh() {
-        loggersState.clear()
-
+    private fun updateState(loggers: Map<String, CxLoggerModel>?, settings: RemoteConnectionSettings) {
         coroutineScope.launch {
-            fetching = true
+
+            loggers(settings).update(loggers ?: emptyMap())
 
             edtWriteAction {
                 PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)
@@ -169,12 +175,33 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         .notify(project)
 
     override fun dispose() {
-        loggersState.clear()
+        loggersStates.forEach { it.value.clear() }
+        loggersStates.clear()
     }
 
-    private fun clearState() {
-        loggersState.clear()
+    private fun clearState(settings: RemoteConnectionSettings) {
+        val logState = loggersStates[settings]
+        logState?.clear()
+
+        coroutineScope.launch {
+            edtWriteAction {
+                PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)
+            }
+        }
+
         fetching = false
+    }
+
+    private fun refresh() {
+        coroutineScope.launch {
+            fetching = true
+
+            edtWriteAction {
+                PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)
+            }
+
+            fetching = false
+        }
     }
 
     companion object {

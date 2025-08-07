@@ -16,9 +16,16 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.intellij.idea.plugin.hybris.actions
+package com.intellij.idea.plugin.hybris.tools.logging
 
-object HybrisActionPlaces {
-    const val CONSOLE_TOOLBAR = "Hybris.Consoles.ContextMenu"
-    const val LOGGERS_TOOLBAR = "SAP.Loggers.View"
+import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings
+import com.intellij.util.messages.Topic
+
+interface LoggersStateListener {
+
+    fun onLoggersStateChanged(remoteConnection: RemoteConnectionSettings) = Unit
+
+    companion object {
+        val TOPIC = Topic(LoggersStateListener::class.java)
+    }
 }

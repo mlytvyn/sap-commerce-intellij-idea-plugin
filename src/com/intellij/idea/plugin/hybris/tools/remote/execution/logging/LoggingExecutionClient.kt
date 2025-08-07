@@ -19,6 +19,7 @@
 package com.intellij.idea.plugin.hybris.tools.remote.execution.logging
 
 import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerModel
+import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerUtilities
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionService
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
 import com.intellij.idea.plugin.hybris.tools.remote.execution.ExecutionClient
@@ -74,8 +75,9 @@ class LoggingExecutionClient(project: Project, coroutineScope: CoroutineScope) :
                     val name = it.jsonObject["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
                     val effectiveLevel = it.jsonObject["effectiveLevel"]?.jsonObject["standardLevel"]?.jsonPrimitive?.content ?: return@mapNotNull null
                     val parentName = it.jsonObject["parentName"]?.jsonPrimitive?.content
+                    val icon = CxLoggerUtilities.getInstance(project).getIcon(name)
 
-                    CxLoggerModel.of(name, effectiveLevel, parentName)
+                    CxLoggerModel.of(name, effectiveLevel, parentName, false, icon)
                 }
 
             return LoggingExecutionResult(
