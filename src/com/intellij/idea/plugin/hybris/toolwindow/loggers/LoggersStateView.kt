@@ -216,11 +216,11 @@ class LoggersStateView(
                     .resizableColumn()
                     .align(AlignX.FILL)
                     .validationOnInput {
-                        if (it.text.isBlank()) error("Please enter not blank logger name")
+                        if (it.text.isBlank()) error("Please enter a logger name")
                         else null
                     }
                     .validationOnApply {
-                        if (it.text.isBlank()) error("Please enter not blank logger name")
+                        if (it.text.isBlank()) error("Please enter a logger name")
                         else null
                     }
                     .comment("Logger (package or class name)")
