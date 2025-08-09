@@ -56,9 +56,9 @@ class LoggersStateView(
     private val showNothingSelected = AtomicBooleanProperty(true)
     private val showFetchLoggers = AtomicBooleanProperty(false)
     private val showNoLogger = AtomicBooleanProperty(false)
-    private val showNewLoggerPanel = AtomicBooleanProperty(false)
     private val showDataPanel = AtomicBooleanProperty(false)
     private val editable = AtomicBooleanProperty(true)
+    private val canApply = AtomicBooleanProperty(true)
 
     private lateinit var dataScrollPane: JBScrollPane
 
@@ -75,13 +75,16 @@ class LoggersStateView(
 
             row {
                 cell(newLoggerPanel())
-                    .visibleIf(showNewLoggerPanel)
+                    .visibleIf(showDataPanel)
                     .align(AlignX.FILL)
             }
 
+            separator(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR)
+                .visibleIf(showDataPanel)
+
             row {
                 dataScrollPane = JBScrollPane(JPanel())
-                    .apply { border = JBUI.Borders.emptyTop(16) }
+                    .apply { border = null }
 
                 cell(dataScrollPane)
                     .align(Align.FILL)
@@ -97,7 +100,7 @@ class LoggersStateView(
     fun renderLoggers(loggers: Map<String, CxLoggerModel>) {
         dataScrollPane.setViewportView(loggersView(loggers))
 
-        toggleView(showNewLoggerPanel, showDataPanel)
+        toggleView( showDataPanel)
     }
 
     private fun toggleView(vararg unhide: AtomicBooleanProperty) {
@@ -105,7 +108,6 @@ class LoggersStateView(
             showNothingSelected,
             showFetchLoggers,
             showNoLogger,
-            showNewLoggerPanel,
             showDataPanel
         )
             .filter { it != unhide }
@@ -187,65 +189,70 @@ class LoggersStateView(
                     .layout(RowLayout.PARENT_GRID)
             }
     }
-        .apply {
-            border = JBUI.Borders.empty(0, 0)
-        }
 
-    private fun newLoggerPanel() = panel {
-        row {
-            val loggerLevelField = comboBox(
-                model = DefaultComboBoxModel<LogLevel>().apply {
-                    LogLevel.entries
-                        .filter { it != LogLevel.CUSTOM }
-                        .forEach { addElement(it) }
-                },
-                renderer = SimpleListCellRenderer.create { label, value, _ ->
-                    if (value != null) {
-                        label.icon = value.icon
-                        label.text = value.name
+    private fun newLoggerPanel(): DialogPanel {
+
+        lateinit var dPanel: DialogPanel
+
+        dPanel = panel {
+            row {
+                val loggerLevelField = comboBox(
+                    model = DefaultComboBoxModel<LogLevel>().apply {
+                        LogLevel.entries
+                            .filter { it != LogLevel.CUSTOM }
+                            .forEach { addElement(it) }
+                    },
+                    renderer = SimpleListCellRenderer.create { label, value, _ ->
+                        if (value != null) {
+                            label.icon = value.icon
+                            label.text = value.name
+                        }
                     }
-                }
-            )
-                .comment("Effective level")
-                .component
+                )
+                    .comment("Effective level")
+                    .component
 
-            val loggerNameField = textField()
-                .resizableColumn()
-                .align(AlignX.FILL)
-                .validationOnInput {
-                    if (it.text.toIntOrNull() == null) error("Please enter a valid logger name")
-                    else null
-                }
-                .comment("Logger (package or class name)")
-                .component
+                val loggerNameField = textField()
+                    .resizableColumn()
+                    .align(AlignX.FILL)
+                    .validationOnInput {
+                        if (it.text.isBlank()) error("Please enter a valid logger name")
+                        else null
+                    }
+                    .comment("Logger (package or class name)")
+                    .component
 
-            button("Apply Logger") {
-                editable.set(false)
-                loggerNameField.isEnabled = false
-                loggerLevelField.isEnabled = false
+                button("Apply Logger") {
+                    canApply.set(dPanel.validateAll().all { it.okEnabled })
 
-                CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
-                    coroutineScope.launch {
-                        withContext(Dispatchers.EDT) {
-                            loggerNameField.isEnabled = true
-                            loggerLevelField.isEnabled = true
-                            editable.set(true)
+                    if (!canApply.get()) return@button
+
+                    editable.set(false)
+                    loggerNameField.isEnabled = false
+                    loggerLevelField.isEnabled = false
+
+                    CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
+                        coroutineScope.launch {
+                            withContext(Dispatchers.EDT) {
+                                loggerNameField.isEnabled = true
+                                loggerLevelField.isEnabled = true
+                                editable.set(true)
+                            }
                         }
                     }
                 }
+                    .enabledIf(canApply)
             }
         }
-    }
-        .apply {
-            registerValidators(this@LoggersStateView)
+            .apply {
+                registerValidators(this@LoggersStateView) { validations ->
+                    canApply.set(validations.values.all { it.okEnabled })
+                }
 
-            background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
-            border = JBUI.Borders.merge(
-                JBUI.Borders.empty(16),
-                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR),
-                true
-            )
-        }
+                border = JBUI.Borders.empty(10, 16, 0, 16)
+            }
+        return dPanel
+    }
 
     override fun dispose() = Unit
 
