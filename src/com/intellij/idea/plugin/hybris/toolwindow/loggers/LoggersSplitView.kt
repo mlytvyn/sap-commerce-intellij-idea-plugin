@@ -18,14 +18,12 @@
 
 package com.intellij.idea.plugin.hybris.toolwindow.loggers
 
-import com.intellij.ide.IdeBundle
 import com.intellij.idea.plugin.hybris.settings.RemoteConnectionListener
 import com.intellij.idea.plugin.hybris.settings.RemoteConnectionSettings
 import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerAccess
 import com.intellij.idea.plugin.hybris.tools.logging.LoggersStateListener
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionService
 import com.intellij.idea.plugin.hybris.tools.remote.RemoteConnectionType
-import com.intellij.idea.plugin.hybris.toolwindow.loggers.table.LoggersStateView
 import com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.LoggersOptionsTree
 import com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.LoggersOptionsTreeNode
 import com.intellij.idea.plugin.hybris.toolwindow.loggers.tree.nodes.HacConnectionLoggersNode
@@ -36,7 +34,6 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.OnePixelSplitter
-import com.intellij.ui.components.JBPanelWithEmptyText
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.asSafely
 import kotlinx.coroutines.CoroutineScope
@@ -48,22 +45,21 @@ import javax.swing.event.TreeSelectionListener
 import javax.swing.tree.DefaultMutableTreeNode
 
 class LoggersSplitView(
-    val project: Project,
+    private val project: Project,
     private val coroutineScope: CoroutineScope
 ) : OnePixelSplitter(false, 0.25f), Disposable {
 
-    private val tree: LoggersOptionsTree = LoggersOptionsTree(project)
-    private val myDefaultPanel = JBPanelWithEmptyText().withEmptyText(IdeBundle.message("empty.text.nothing.selected"))
-    private val fetchLoggersStatePanel = JBPanelWithEmptyText().withEmptyText("Fetch Loggers State")
-    private val noLogTemplatePanel = JBPanelWithEmptyText().withEmptyText("No Logger Templates")
-    private val loggersStateView: LoggersStateView = LoggersStateView.Companion.getInstance(project)
+    private val tree = LoggersOptionsTree(project)
+    private val loggersStateView = LoggersStateView(project, coroutineScope)
 
     init {
+
         firstComponent = JBScrollPane(tree)
-        secondComponent = myDefaultPanel
+        secondComponent = loggersStateView.component
 
         //PopupHandler.installPopupMenu(tree, "action.group.id", "place")
         Disposer.register(this, tree)
+        Disposer.register(this, loggersStateView)
 
         val activeConnection = RemoteConnectionService.Companion.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
         val connections = RemoteConnectionService.Companion.getInstance(project).getRemoteConnections(RemoteConnectionType.Hybris)
@@ -134,20 +130,13 @@ class LoggersSplitView(
             if (project.isDisposed) return@launch
 
             when (node) {
-                is HacConnectionLoggersNode -> {
-                    val loggers = CxLoggerAccess.getInstance(project).loggers(node.connectionSettings).all()
-                    if (loggers.isNotEmpty()) {
-                        loggersStateView.renderView(loggers) { _, view ->
-                            secondComponent = view
-                        }
-                    } else {
-                        secondComponent = fetchLoggersStatePanel
-                    }
-                }
+                is HacConnectionLoggersNode -> CxLoggerAccess.getInstance(project).state(node.connectionSettings).get()
+                    ?.let { loggersStateView.renderLoggers(it) }
+                    ?: loggersStateView.renderFetchLoggers()
 
-                is BundledLoggersTemplateLoggersOptionsNode -> secondComponent = noLogTemplatePanel
-                is CustomLoggersTemplateLoggersOptionsNode -> secondComponent = noLogTemplatePanel
-                else -> secondComponent = myDefaultPanel
+                is BundledLoggersTemplateLoggersOptionsNode -> loggersStateView.renderNoLoggerTemplates()
+                is CustomLoggersTemplateLoggersOptionsNode -> loggersStateView.renderNoLoggerTemplates()
+                else -> loggersStateView.renderNothingSelected()
             }
         }
     }

@@ -20,35 +20,35 @@ package com.intellij.idea.plugin.hybris.tools.logging
 
 class CxLoggersState {
 
-    private val loggers: MutableMap<String, CxLoggerModel>
+    private val _loggers: MutableMap<String, CxLoggerModel>
     private var _initialized: Boolean = false
 
     val initialized: Boolean
         get() = _initialized
 
     constructor(loggers: Map<String, CxLoggerModel>) {
-        this.loggers = loggers.toMutableMap()
+        this._loggers = loggers.toMutableMap()
         _initialized = !loggers.isEmpty()
     }
 
     constructor() : this(mapOf())
 
-    fun get(loggerIdentifier: String): CxLoggerModel = loggers[loggerIdentifier]
+    fun get(loggerIdentifier: String): CxLoggerModel = _loggers[loggerIdentifier]
         ?: createLoggerModel(loggerIdentifier)
 
     fun update(loggers: Map<String, CxLoggerModel>) {
         synchronized(loggers) {
-            this.loggers.clear()
-            this.loggers.putAll(loggers)
+            this._loggers.clear()
+            this._loggers.putAll(loggers)
             _initialized = true
         }
     }
 
-    fun all() : Map<String, CxLoggerModel> = if (_initialized) loggers else emptyMap()
+    fun get() : Map<String, CxLoggerModel>? = if (_initialized) _loggers else null
 
     fun clear() {
-        synchronized(loggers) {
-            this.loggers.clear()
+        synchronized(_loggers) {
+            this._loggers.clear()
             _initialized = false
         }
     }
@@ -57,10 +57,10 @@ class CxLoggersState {
         val parentLogger = loggerIdentifier.substringBeforeLast('.', "")
             .takeIf { it.isNotBlank() }
             ?.let { get(it) }
-            ?: loggers[CxLoggerModel.ROOT_LOGGER_NAME]
+            ?: _loggers[CxLoggerModel.ROOT_LOGGER_NAME]
             ?: CxLoggerModel.rootFallback()
 
-        return loggers.getOrPut(loggerIdentifier) {
+        return _loggers.getOrPut(loggerIdentifier) {
             CxLoggerModel.inherited(loggerIdentifier, parentLogger)
         }
     }

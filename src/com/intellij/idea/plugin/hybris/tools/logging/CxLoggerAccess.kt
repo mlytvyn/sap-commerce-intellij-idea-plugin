@@ -29,6 +29,7 @@ import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecu
 import com.intellij.idea.plugin.hybris.tools.remote.execution.groovy.GroovyExecutionContext
 import com.intellij.idea.plugin.hybris.tools.remote.execution.logging.LoggingExecutionClient
 import com.intellij.idea.plugin.hybris.tools.remote.execution.logging.LoggingExecutionContext
+import com.intellij.idea.plugin.hybris.tools.remote.execution.logging.LoggingExecutionResult
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.edtWriteAction
@@ -51,7 +52,7 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
     val stateInitialized: Boolean
         get() {
             val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
-            return loggers(server).initialized
+            return state(server).initialized
         }
 
     init {
@@ -67,10 +68,10 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
 
     fun logger(loggerIdentifier: String): CxLoggerModel? {
         val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
-        return if (stateInitialized) loggers(server).get(loggerIdentifier) else null
+        return if (stateInitialized) state(server).get(loggerIdentifier) else null
     }
 
-    fun setLogger(loggerName: String, logLevel: LogLevel) {
+    fun setLogger(loggerName: String, logLevel: LogLevel, callback: (CoroutineScope, LoggingExecutionResult) -> Unit = { _, _ -> }) {
         val server = RemoteConnectionService.getInstance(project).getActiveRemoteConnectionSettings(RemoteConnectionType.Hybris)
         val context = LoggingExecutionContext(
             executionTitle = "Update Log Level Status for SAP Commerce [${server.shortenConnectionName()}]...",
@@ -78,8 +79,10 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
             logLevel = logLevel
         )
         fetching = true
-        LoggingExecutionClient.getInstance(project).execute(context) { _, result ->
+        LoggingExecutionClient.getInstance(project).execute(context) { coroutineScope, result ->
             updateState(result.loggers, server)
+            callback.invoke(coroutineScope, result)
+
             project.messageBus.syncPublisher(LoggersStateListener.TOPIC).onLoggersStateChanged(server)
 
             if (result.hasError) notify(NotificationType.ERROR, "Failed To Update Log Level") {
@@ -160,14 +163,14 @@ class CxLoggerAccess(private val project: Project, private val coroutineScope: C
         }
     }
 
-    fun loggers(settings: RemoteConnectionSettings): CxLoggersState {
+    fun state(settings: RemoteConnectionSettings): CxLoggersState {
         return loggersStates.computeIfAbsent(settings) { CxLoggersState() }
     }
 
     private fun updateState(loggers: Map<String, CxLoggerModel>?, settings: RemoteConnectionSettings) {
         coroutineScope.launch {
 
-            loggers(settings).update(loggers ?: emptyMap())
+            state(settings).update(loggers ?: emptyMap())
 
             edtWriteAction {
                 PsiDocumentManager.getInstance(project).reparseFiles(emptyList(), true)

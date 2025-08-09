@@ -16,68 +16,81 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.intellij.idea.plugin.hybris.toolwindow.loggers.table
+package com.intellij.idea.plugin.hybris.toolwindow.loggers
 
+import com.intellij.ide.IdeBundle
 import com.intellij.ide.projectView.ProjectView
 import com.intellij.ide.util.PsiNavigationSupport
 import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerAccess
 import com.intellij.idea.plugin.hybris.tools.logging.CxLoggerModel
 import com.intellij.idea.plugin.hybris.tools.logging.LogLevel
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.application.readAction
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.observable.properties.AtomicBooleanProperty
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.DialogPanel
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiPackage
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.startOffset
 import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.components.JBPanelWithEmptyText
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.asSafely
+import com.intellij.util.ui.JBEmptyBorder
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.swing.DefaultComboBoxModel
-import javax.swing.JComponent
+import javax.swing.ScrollPaneConstants
 
-@Service(Service.Level.PROJECT)
-class LoggersStateView(private val project: Project, private val coroutineScope: CoroutineScope) {
+class LoggersStateView(
+    private val project: Project,
+    private val coroutineScope: CoroutineScope
+) : Disposable {
 
-    fun renderView(loggers: Map<String, CxLoggerModel>, applyView: (CoroutineScope, JComponent) -> Unit) {
-        coroutineScope.launch {
-            if (project.isDisposed) return@launch
+    private val showNewLoggerPanel = AtomicBooleanProperty(false)
+    private lateinit var contentPlaceholder: Placeholder
 
-            val view = panel {
-                row {
-                    scrollCell(dataView(loggers))
-                        .resizableColumn()
-                        .align(Align.FILL)
-                }
-                    .resizableRow()
+    val component: DialogPanel
+        get() = panel {
+            row {
+                cell(newLoggerPanel())
+                    .visibleIf(showNewLoggerPanel)
+                    .resizableColumn()
+                    .align(AlignX.FILL)
             }
 
-            applyView(this, view)
+            row {
+                contentPlaceholder = placeholder()
+                    .resizableColumn()
+                    .align(Align.FILL)
+            }.resizableRow()
+        }
+            .also { renderNothingSelected() }
+
+    fun renderFetchLoggers() = renderText("Fetch Loggers State")
+    fun renderNoLoggerTemplates() = renderText("No Logger Templates")
+    fun renderNothingSelected() = renderText(IdeBundle.message("empty.text.nothing.selected"))
+
+    fun renderLoggers(loggers: Map<String, CxLoggerModel>) {
+        showNewLoggerPanel.set(true)
+        contentPlaceholder.component = JBScrollPane(loggersView(loggers)).apply {
+            setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+            setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+            border = JBEmptyBorder(0)
         }
     }
 
-    private fun dataView(loggers: Map<String, CxLoggerModel>): JComponent = panel {
+    private fun loggersView(loggers: Map<String, CxLoggerModel>) = panel {
         val editable = AtomicBooleanProperty(true)
 
-        row {
-            label("Effective level")
-
-            label("Logger")
-            label("")
-
-            label("Parent")
-        }
-            .bottomGap(BottomGap.SMALL)
-            .layout(RowLayout.PARENT_GRID)
-
         loggers.values
-//            .sortedWith(compareBy({ it.parentName }, { it.name }))
             .sortedBy { it.name }
             .forEach { cxLogger ->
                 row {
@@ -145,11 +158,61 @@ class LoggersStateView(private val project: Project, private val coroutineScope:
             }
     }
         .apply {
-            border = JBUI.Borders.empty(0, 16, 16, 16)
+            border = JBUI.Borders.empty(16)
         }
 
-    companion object {
-        fun getInstance(project: Project): LoggersStateView = project.service()
+    private fun renderText(text: String) {
+        showNewLoggerPanel.set(false)
+        contentPlaceholder.component = JBPanelWithEmptyText()
+            .withEmptyText(text)
     }
+
+    private fun newLoggerPanel() = panel {
+        row {
+            val loggerLevelField = comboBox(
+                model = DefaultComboBoxModel<LogLevel>().apply {
+                    LogLevel.entries
+                        .filter { it != LogLevel.CUSTOM }
+                        .forEach { addElement(it) }
+                },
+                renderer = SimpleListCellRenderer.create { label, value, _ ->
+                    if (value != null) {
+                        label.icon = value.icon
+                        label.text = value.name
+                    }
+                }
+            )
+                .comment("Effective level")
+                .component
+
+            val loggerNameField = textField()
+                .resizableColumn()
+                .align(AlignX.FILL)
+                .comment("Logger (package or class name)")
+                .component
+
+            button("Apply Logger") {
+                loggerNameField.isEnabled = false
+                loggerLevelField.isEnabled = false
+
+                CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
+                    coroutineScope.launch {
+                        withContext(Dispatchers.EDT) {
+                            loggerNameField.isEnabled = true
+                            loggerLevelField.isEnabled = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+        .apply {
+            registerValidators(this@LoggersStateView)
+
+            background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
+            border = JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR)
+        }
+
+    override fun dispose() = Unit
 
 }
