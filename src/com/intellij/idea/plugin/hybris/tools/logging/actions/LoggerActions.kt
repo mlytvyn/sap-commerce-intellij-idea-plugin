@@ -27,6 +27,7 @@ import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.ui.AnimatedIcon
 
 abstract class CxLoggerAction(private val logLevel: LogLevel) : AnAction() {
 
@@ -69,7 +70,6 @@ class ErrorLoggerAction : CxLoggerAction(LogLevel.ERROR)
 class FatalLoggerAction : CxLoggerAction(LogLevel.FATAL)
 class SevereLoggerAction : CxLoggerAction(LogLevel.SEVERE)
 
-//TODO display an animated icon for fetching state only if action is in toolbar
 class FetchLoggersStateAction : AnAction() {
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
@@ -97,5 +97,6 @@ class FetchLoggersStateAction : AnAction() {
 
         e.presentation.text = if (state) "Refresh Loggers State" else "Fetch Loggers State"
         e.presentation.icon = if (state) HybrisIcons.Log.Action.REFRESH else HybrisIcons.Log.Action.FETCH
+        e.presentation.disabledIcon = if (loggerAccess.ready) null else AnimatedIcon.Default.INSTANCE
     }
 }
