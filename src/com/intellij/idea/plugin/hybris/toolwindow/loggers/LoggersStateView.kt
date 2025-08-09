@@ -58,7 +58,7 @@ class LoggersStateView(
     private val showNoLogger = AtomicBooleanProperty(false)
     private val showDataPanel = AtomicBooleanProperty(false)
     private val editable = AtomicBooleanProperty(true)
-    private val canApply = AtomicBooleanProperty(true)
+    private val canApply = AtomicBooleanProperty(false)
 
     private lateinit var dataScrollPane: JBScrollPane
 
@@ -216,7 +216,11 @@ class LoggersStateView(
                     .resizableColumn()
                     .align(AlignX.FILL)
                     .validationOnInput {
-                        if (it.text.isBlank()) error("Please enter a valid logger name")
+                        if (it.text.isBlank()) error("Please enter not blank logger name")
+                        else null
+                    }
+                    .validationOnApply {
+                        if (it.text.isBlank()) error("Please enter not blank logger name")
                         else null
                     }
                     .comment("Logger (package or class name)")
@@ -241,7 +245,6 @@ class LoggersStateView(
                         }
                     }
                 }
-                    .enabledIf(canApply)
             }
         }
             .apply {
