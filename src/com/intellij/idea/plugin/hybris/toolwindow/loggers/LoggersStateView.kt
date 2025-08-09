@@ -29,6 +29,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.observable.properties.AtomicBooleanProperty
+import com.intellij.openapi.observable.util.or
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.psi.PsiClass
@@ -36,62 +37,89 @@ import com.intellij.psi.PsiPackage
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.startOffset
 import com.intellij.ui.SimpleListCellRenderer
-import com.intellij.ui.components.JBPanelWithEmptyText
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.asSafely
-import com.intellij.util.ui.JBEmptyBorder
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.swing.DefaultComboBoxModel
-import javax.swing.JComponent
-import javax.swing.ScrollPaneConstants
+import javax.swing.JPanel
 
 class LoggersStateView(
     private val project: Project,
     private val coroutineScope: CoroutineScope
 ) : Disposable {
 
+    private val showNothingSelected = AtomicBooleanProperty(true)
+    private val showFetchLoggers = AtomicBooleanProperty(false)
+    private val showNoLogger = AtomicBooleanProperty(false)
     private val showNewLoggerPanel = AtomicBooleanProperty(false)
-    private lateinit var contentPlaceholder: Placeholder
+    private val showDataPanel = AtomicBooleanProperty(false)
+    private val editable = AtomicBooleanProperty(true)
+
+    private lateinit var dataScrollPane: JBScrollPane
 
     val component: DialogPanel
         get() = panel {
             row {
+                cellNoData(showFetchLoggers, "Fetch Loggers State")
+                cellNoData(showNoLogger, "No Logger Templates")
+                cellNoData(showNothingSelected, IdeBundle.message("empty.text.nothing.selected"))
+            }
+                .visibleIf(showFetchLoggers.or(showNoLogger).or(showNothingSelected))
+                .resizableRow()
+                .topGap(TopGap.MEDIUM)
+
+            row {
                 cell(newLoggerPanel())
                     .visibleIf(showNewLoggerPanel)
-                    .resizableColumn()
-                    .align(Align.FILL)
+                    .align(AlignX.FILL)
             }
 
             row {
-                contentPlaceholder = placeholder()
-                    .resizableColumn()
+                dataScrollPane = JBScrollPane(JPanel())
+                    .apply { border = JBUI.Borders.emptyTop(16) }
+
+                cell(dataScrollPane)
                     .align(Align.FILL)
-            }.resizableRow()
+                    .visibleIf(showDataPanel)
+            }
+                .resizableRow()
         }
             .apply { renderNothingSelected() }
 
-    fun renderFetchLoggers() = renderText("Fetch Loggers State")
-    fun renderNoLoggerTemplates() = renderText("No Logger Templates")
-    fun renderNothingSelected() = renderText(IdeBundle.message("empty.text.nothing.selected"))
-
+    fun renderFetchLoggers() = toggleView(showFetchLoggers)
+    fun renderNoLoggerTemplates() = toggleView(showNoLogger)
+    fun renderNothingSelected() = toggleView(showNothingSelected)
     fun renderLoggers(loggers: Map<String, CxLoggerModel>) {
-        showNewLoggerPanel.set(true)
+        dataScrollPane.setViewportView(loggersView(loggers))
 
-        contentPlaceholder.component = JBScrollPane(loggersView(loggers)).apply {
-            setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-            setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-            border = JBEmptyBorder(0)
-        }
+        toggleView(showNewLoggerPanel, showDataPanel)
     }
 
-    private fun loggersView(loggers: Map<String, CxLoggerModel>) = panel {
-        val editable = AtomicBooleanProperty(true)
+    private fun toggleView(vararg unhide: AtomicBooleanProperty) {
+        listOf(
+            showNothingSelected,
+            showFetchLoggers,
+            showNoLogger,
+            showNewLoggerPanel,
+            showDataPanel
+        )
+            .filter { it != unhide }
+            .forEach { it.set(false) }
 
+        unhide.forEach { it.set(true) }
+    }
+
+    private fun Row.cellNoData(property: AtomicBooleanProperty, text: String) = text(text)
+        .visibleIf(property)
+        .align(Align.CENTER)
+        .resizableColumn()
+
+    private fun loggersView(loggers: Map<String, CxLoggerModel>) = panel {
         loggers.values
             .sortedBy { it.name }
             .forEach { cxLogger ->
@@ -160,77 +188,64 @@ class LoggersStateView(
             }
     }
         .apply {
-            border = JBUI.Borders.empty(16)
+            border = JBUI.Borders.empty(0, 0)
         }
 
-    private fun renderText(text: String) {
-        showNewLoggerPanel.set(false)
-
-        contentPlaceholder.component = JBPanelWithEmptyText()
-            .withEmptyText(text)
-    }
-
-    private fun newLoggerPanel(): JComponent {
-        val actionPanel = panel {
-            row {
-                val loggerLevelField = comboBox(
-                    model = DefaultComboBoxModel<LogLevel>().apply {
-                        LogLevel.entries
-                            .filter { it != LogLevel.CUSTOM }
-                            .forEach { addElement(it) }
-                    },
-                    renderer = SimpleListCellRenderer.create { label, value, _ ->
-                        if (value != null) {
-                            label.icon = value.icon
-                            label.text = value.name
-                        }
+    private fun newLoggerPanel() = panel {
+        row {
+            val loggerLevelField = comboBox(
+                model = DefaultComboBoxModel<LogLevel>().apply {
+                    LogLevel.entries
+                        .filter { it != LogLevel.CUSTOM }
+                        .forEach { addElement(it) }
+                },
+                renderer = SimpleListCellRenderer.create { label, value, _ ->
+                    if (value != null) {
+                        label.icon = value.icon
+                        label.text = value.name
                     }
-                )
-                    .comment("Effective level")
-                    .component
+                }
+            )
+                .comment("Effective level")
+                .component
 
-                val loggerNameField = textField()
-                    .resizableColumn()
-                    .align(AlignX.FILL)
-                    .comment("Logger (package or class name)")
-                    .component
+            val loggerNameField = textField()
+                .resizableColumn()
+                .align(AlignX.FILL)
+                .validationOnInput {
+                    if (it.text.toIntOrNull() == null) error("Please enter a valid logger name")
+                    else null
+                }
+                .comment("Logger (package or class name)")
+                .component
 
-                button("Apply Logger") {
-                    loggerNameField.isEnabled = false
-                    loggerLevelField.isEnabled = false
+            button("Apply Logger") {
+                editable.set(false)
+                loggerNameField.isEnabled = false
+                loggerLevelField.isEnabled = false
 
-                    CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
-                        coroutineScope.launch {
-                            withContext(Dispatchers.EDT) {
-                                loggerNameField.isEnabled = true
-                                loggerLevelField.isEnabled = true
-                            }
+                CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
+                    coroutineScope.launch {
+                        withContext(Dispatchers.EDT) {
+                            loggerNameField.isEnabled = true
+                            loggerLevelField.isEnabled = true
+                            editable.set(true)
                         }
                     }
                 }
             }
         }
-            .apply {
-                registerValidators(this@LoggersStateView)
-
-                background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
-                border = JBUI.Borders.merge(
-                    JBUI.Borders.empty(16),
-                    JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR),
-                    true
-                )
-//                border = JBUI.Borders.empty(16)
-            }
-
-        return actionPanel
-//        return panel {
-//            row {
-//                cell(actionPanel)
-//                    .resizableColumn()
-//                    .align(AlignX.FILL)
-//            }
-//        }
     }
+        .apply {
+            registerValidators(this@LoggersStateView)
+
+            background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
+            border = JBUI.Borders.merge(
+                JBUI.Borders.empty(16),
+                JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR),
+                true
+            )
+        }
 
     override fun dispose() = Unit
 
