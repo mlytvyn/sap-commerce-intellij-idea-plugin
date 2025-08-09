@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.swing.DefaultComboBoxModel
+import javax.swing.JComponent
 import javax.swing.ScrollPaneConstants
 
 class LoggersStateView(
@@ -63,7 +64,7 @@ class LoggersStateView(
                 cell(newLoggerPanel())
                     .visibleIf(showNewLoggerPanel)
                     .resizableColumn()
-                    .align(AlignX.FILL)
+                    .align(Align.FILL)
             }
 
             row {
@@ -72,7 +73,7 @@ class LoggersStateView(
                     .align(Align.FILL)
             }.resizableRow()
         }
-            .also { renderNothingSelected() }
+            .apply { renderNothingSelected() }
 
     fun renderFetchLoggers() = renderText("Fetch Loggers State")
     fun renderNoLoggerTemplates() = renderText("No Logger Templates")
@@ -80,6 +81,7 @@ class LoggersStateView(
 
     fun renderLoggers(loggers: Map<String, CxLoggerModel>) {
         showNewLoggerPanel.set(true)
+
         contentPlaceholder.component = JBScrollPane(loggersView(loggers)).apply {
             setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
             setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -163,55 +165,72 @@ class LoggersStateView(
 
     private fun renderText(text: String) {
         showNewLoggerPanel.set(false)
+
         contentPlaceholder.component = JBPanelWithEmptyText()
             .withEmptyText(text)
     }
 
-    private fun newLoggerPanel() = panel {
-        row {
-            val loggerLevelField = comboBox(
-                model = DefaultComboBoxModel<LogLevel>().apply {
-                    LogLevel.entries
-                        .filter { it != LogLevel.CUSTOM }
-                        .forEach { addElement(it) }
-                },
-                renderer = SimpleListCellRenderer.create { label, value, _ ->
-                    if (value != null) {
-                        label.icon = value.icon
-                        label.text = value.name
+    private fun newLoggerPanel(): JComponent {
+        val actionPanel = panel {
+            row {
+                val loggerLevelField = comboBox(
+                    model = DefaultComboBoxModel<LogLevel>().apply {
+                        LogLevel.entries
+                            .filter { it != LogLevel.CUSTOM }
+                            .forEach { addElement(it) }
+                    },
+                    renderer = SimpleListCellRenderer.create { label, value, _ ->
+                        if (value != null) {
+                            label.icon = value.icon
+                            label.text = value.name
+                        }
                     }
-                }
-            )
-                .comment("Effective level")
-                .component
+                )
+                    .comment("Effective level")
+                    .component
 
-            val loggerNameField = textField()
-                .resizableColumn()
-                .align(AlignX.FILL)
-                .comment("Logger (package or class name)")
-                .component
+                val loggerNameField = textField()
+                    .resizableColumn()
+                    .align(AlignX.FILL)
+                    .comment("Logger (package or class name)")
+                    .component
 
-            button("Apply Logger") {
-                loggerNameField.isEnabled = false
-                loggerLevelField.isEnabled = false
+                button("Apply Logger") {
+                    loggerNameField.isEnabled = false
+                    loggerLevelField.isEnabled = false
 
-                CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
-                    coroutineScope.launch {
-                        withContext(Dispatchers.EDT) {
-                            loggerNameField.isEnabled = true
-                            loggerLevelField.isEnabled = true
+                    CxLoggerAccess.getInstance(project).setLogger(loggerNameField.text!!, loggerLevelField.selectedItem as LogLevel) { coroutineScope, _ ->
+                        coroutineScope.launch {
+                            withContext(Dispatchers.EDT) {
+                                loggerNameField.isEnabled = true
+                                loggerLevelField.isEnabled = true
+                            }
                         }
                     }
                 }
             }
         }
-    }
-        .apply {
-            registerValidators(this@LoggersStateView)
+            .apply {
+                registerValidators(this@LoggersStateView)
 
-            background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
-            border = JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR)
-        }
+                background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
+                border = JBUI.Borders.merge(
+                    JBUI.Borders.empty(16),
+                    JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR),
+                    true
+                )
+//                border = JBUI.Borders.empty(16)
+            }
+
+        return actionPanel
+//        return panel {
+//            row {
+//                cell(actionPanel)
+//                    .resizableColumn()
+//                    .align(AlignX.FILL)
+//            }
+//        }
+    }
 
     override fun dispose() = Unit
 
