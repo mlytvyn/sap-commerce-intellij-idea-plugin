@@ -7,6 +7,9 @@
 ### `Spring` enhancements
 - `2026.2.1` back-port | Mykhailo Lytvyn | Improved "Simple Spring" and added parent beans resolution in Non-Ultimate edition [#1985](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1985)
 
+### `CCv2` enhancements
+- `2026.2.1` back-port | Mykhailo Lytvyn | Show informative message when authentication failed [#1984](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1984)
+
 ## [2026.0.15]
 
 <cite>Release contributors</code>
