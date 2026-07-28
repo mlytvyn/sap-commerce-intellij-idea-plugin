@@ -4,6 +4,9 @@
 - `2026.2.3` back-port | Rainer Baun | Skip state validation of the built-in plugins during the import [#1996](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1996)
 - `2026.2.3` back-port | Flaviu Lupoian | Exclude Spock specific `resources/META-INF/services` directory from the module library roots [#1997](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1997)
 
+### `Spring` enhancements
+- `2026.2.1` back-port | Mykhailo Lytvyn | Improved "Simple Spring" and added parent beans resolution in Non-Ultimate edition [#1985](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1985)
+
 ## [2026.0.15]
 
 <cite>Release contributors</code>
