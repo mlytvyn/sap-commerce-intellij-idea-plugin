@@ -10,6 +10,9 @@
 ### `CCv2` enhancements
 - `2026.2.1` back-port | Mykhailo Lytvyn | Show informative message when authentication failed [#1984](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1984)
 
+### `AI` capabilities
+- `2026.2.1` back-port | Mykhailo Lytvyn | Expose the complete TypeSystem as MCP tool [#1987](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1987)
+
 ### Fixes
 - `2026.2.1` back-port | Flaviu Lupoian | Keep credentials of the `hAC` and `Solr` connections which were not opened before saving the connection settings [#1992](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1992)
 
