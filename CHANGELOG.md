@@ -14,6 +14,7 @@
 - `2026.2.1` back-port | Mykhailo Lytvyn | Expose the complete TypeSystem as MCP tool [#1987](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1987)
 - `2026.2.1` back-port | Mykhailo Lytvyn | Expose the complete Bean System as MCP tool [#1988](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1988)
 - `2026.2.1` back-port | Mykhailo Lytvyn | Expose CCv2 management operations as MCP tools [#1989](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1989)
+- `2026.2.1` back-port | Mykhailo Lytvyn | Expose business processes via MCP tool [#1990](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1990)
 
 ### Fixes
 - `2026.2.1` back-port | Flaviu Lupoian | Keep credentials of the `hAC` and `Solr` connections which were not opened before saving the connection settings [#1992](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1992)

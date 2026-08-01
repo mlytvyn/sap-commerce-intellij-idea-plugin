@@ -16,13 +16,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package sap.commerce.toolset.typeSystem.mcp.context
+package sap.commerce.toolset.businessProcess.mcp.context
 
-import sap.commerce.toolset.ai.mcp.context.ExtensionsAwareMcpRequest
-import sap.commerce.toolset.typeSystem.meta.model.TSMetaType
+enum class SearchScope {
+    CUSTOM, ALL;
 
-open class TSSearchMcpRequest(
-    val metaType: TSMetaType,
-    val filter: String? = null,
-    override val rawExtensions: String?,
-) : ExtensionsAwareMcpRequest
+    companion object {
+        fun resolve(scope: String) = SearchScope.entries.find { it.name.equals(scope.trim(), ignoreCase = true) }
+            ?: error("Invalid scope '$scope'. Valid values: ${SearchScope.entries.joinToString { it.name }}")
+    }
+}

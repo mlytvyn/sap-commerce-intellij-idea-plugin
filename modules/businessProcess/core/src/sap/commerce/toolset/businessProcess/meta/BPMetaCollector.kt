@@ -15,14 +15,17 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+package sap.commerce.toolset.businessProcess.meta
 
-package sap.commerce.toolset.typeSystem.mcp.context
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
+import sap.commerce.toolset.businessProcess.model.Process
+import sap.commerce.toolset.meta.MetaCollector
 
-import sap.commerce.toolset.ai.mcp.context.ExtensionsAwareMcpRequest
-import sap.commerce.toolset.typeSystem.meta.model.TSMetaType
-
-open class TSSearchMcpRequest(
-    val metaType: TSMetaType,
-    val filter: String? = null,
-    override val rawExtensions: String?,
-) : ExtensionsAwareMcpRequest
+@Service(Service.Level.PROJECT)
+class BPMetaCollector(myProject: Project) : MetaCollector<Process>(myProject, Process::class.java, nameProvider = { it.name }) {
+    companion object {
+        fun getInstance(project: Project): BPMetaCollector = project.service()
+    }
+}

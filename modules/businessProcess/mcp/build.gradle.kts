@@ -16,13 +16,38 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package sap.commerce.toolset.typeSystem.mcp.context
+fun properties(key: String) = providers.gradleProperty(key)
 
-import sap.commerce.toolset.ai.mcp.context.ExtensionsAwareMcpRequest
-import sap.commerce.toolset.typeSystem.meta.model.TSMetaType
+plugins {
+    id("org.jetbrains.intellij.platform.module")
+    alias(libs.plugins.kotlin) // Kotlin support
+    alias(libs.plugins.serialization) // Kotlin serialization
+}
 
-open class TSSearchMcpRequest(
-    val metaType: TSMetaType,
-    val filter: String? = null,
-    override val rawExtensions: String?,
-) : ExtensionsAwareMcpRequest
+sourceSets {
+    main {
+        java.srcDirs("src")
+        resources.srcDirs("resources")
+    }
+    test {
+        java.srcDirs("tests")
+    }
+}
+
+dependencies {
+    implementation(project(":shared-core"))
+    implementation(project(":meta-core"))
+    implementation(project(":ai-mcp"))
+    implementation(project(":businessProcess-core"))
+    implementation(libs.kotlinxJson)
+
+    intellijPlatform {
+        intellijIdea(properties("intellij.version")) {
+            useInstaller = true
+        }
+
+        bundledPlugins(
+            "com.intellij.mcpServer",
+        )
+    }
+}
