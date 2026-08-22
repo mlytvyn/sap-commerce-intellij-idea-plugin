@@ -1,7 +1,8 @@
 ## [2026.0.16]
 
 ### `Project Import` enhancements
-- `2026.2.3` back-port | Skip state validation of the built-in plugins during the import [#1996](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1996)
+- `2026.2.3` back-port | Rainer Baun | Skip state validation of the built-in plugins during the import [#1996](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1996)
+- `2026.2.3` back-port | Flaviu Lupoian | Exclude Spock specific `resources/META-INF/services` directory from the module library roots [#1997](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1997)
 
 ## [2026.0.15]
 
