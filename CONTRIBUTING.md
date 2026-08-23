@@ -55,3 +55,5 @@
 - Patrick Gäckle
 - Sina Bastani
 - Fabio Elias Filpi
+- Flaviu Lupoian
+- Rainer Baun

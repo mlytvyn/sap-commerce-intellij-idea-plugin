@@ -1,3 +1,8 @@
+## [2026.0.16]
+
+### `Project Import` enhancements
+- `2026.2.3` back-port | Skip state validation of the built-in plugins during the import [#1996](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1996)
+
 ## [2026.0.15]
 
 <cite>Release contributors</code>
@@ -10,9 +15,9 @@
 
 ### `AI` capabilities
 - Expose local ImpEx syntax/inspection validation as MCP tool [#1950](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1950)
-- Expose type system Enum types as MCP tool [#1952](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1952)
-- Expose type system Map types as MCP tool [#1953](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1953)
-- Expose type system Relation types as MCP tool [#1954](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1954)
+- Expose Type System Enum types as MCP tool [#1952](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1952)
+- Expose Type System Map types as MCP tool [#1953](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1953)
+- Expose Type System Relation types as MCP tool [#1954](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1954)
 - Expose Bean System DTO beans as MCP tool [#1956](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1956)
 - Expose Bean System WS beans as MCP tool [#1957](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1957)
 - Expose Bean System event beans as MCP tool [#1958](https://github.com/epam/sap-commerce-intellij-idea-plugin/pull/1958)
